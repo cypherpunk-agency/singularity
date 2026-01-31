@@ -1,0 +1,4 @@
+# State persistence directory
+# - session-id.txt: Persistent session UUID
+# - memory.db: SQLite vector database for memory search
+# - run-history.jsonl: Audit trail of all agent runs

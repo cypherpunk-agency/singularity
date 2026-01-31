@@ -1,0 +1,34 @@
+# Environment
+.env
+
+# State files (contains session data)
+state/session-id.txt
+state/memory.db
+state/run-history.jsonl
+
+# Logs
+logs/heartbeat.log
+logs/agent-output/*.json
+
+# Memory logs (keep structure, ignore content)
+agent/memory/*.md
+agent/memory/archive/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

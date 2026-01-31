@@ -1,0 +1,3 @@
+# Log files directory
+# - heartbeat.log: Main heartbeat execution log
+# - agent-output/: JSON responses from each agent run

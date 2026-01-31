@@ -1,0 +1,13 @@
+# Singularity Agent Cron Schedule
+# All times are in container timezone (default: UTC)
+
+# Hourly heartbeat - runs at the top of each hour
+0 * * * * /app/scripts/heartbeat.sh >> /app/logs/heartbeat.log 2>&1
+
+# Daily memory consolidation at 3 AM
+# Archives logs older than 7 days
+0 3 * * * /app/scripts/memory-manager.sh consolidate >> /app/logs/heartbeat.log 2>&1
+
+# Daily memory index refresh at 3:30 AM
+# Rebuilds vector search index
+30 3 * * * /app/scripts/memory-manager.sh index >> /app/logs/heartbeat.log 2>&1

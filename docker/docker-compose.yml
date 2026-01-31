@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: singularity-agent
+    restart: unless-stopped
+
+    environment:
+      - AGENT_MODEL=${AGENT_MODEL:-sonnet}
+      - TZ=${TZ:-UTC}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+
+    volumes:
+      # Agent files (tasks, memory)
+      - ../agent:/app/agent
+
+      # Logs directory
+      - ../logs:/app/logs
+
+      # State persistence (session, vector DB, history)
+      - ../state:/app/state
+
+      # Claude CLI session data
+      - claude-data:/home/agent/.claude
+
+      # Scripts (for development - can remove in production)
+      - ../scripts:/app/scripts:ro
+
+    # Keep container running
+    tty: true
+    stdin_open: true
+
+volumes:
+  claude-data:
+    name: singularity-claude-data

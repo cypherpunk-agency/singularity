@@ -1,0 +1,12 @@
+# Singularity Agent - Python Dependencies
+
+# Vector search with sentence transformers (local embeddings)
+sentence-transformers>=2.2.0
+
+# Tokenization for accurate chunking
+tiktoken>=0.5.0
+
+# SQLite vector extension (optional, falls back to manual similarity)
+# sqlite-vec>=0.1.0
+
+# Standard library sqlite3 is used for database

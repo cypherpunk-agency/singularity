@@ -7,3 +7,6 @@ SHELL=/bin/bash
 
 # Hourly heartbeat - runs at the top of each hour
 0 * * * * /app/scripts/run-agent.sh --type cron >> /app/logs/heartbeat.log 2>&1
+
+# Daily vector index rebuild at 3:30 AM
+30 3 * * * curl -s -X POST http://vector:5000/index >> /app/logs/vector-index.log 2>&1

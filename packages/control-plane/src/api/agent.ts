@@ -79,10 +79,11 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       // Good, agent is not running
     }
 
-    // Trigger the heartbeat script
+    // Trigger the agent script with optional prompt
     try {
-      const heartbeatScript = path.join(basePath, 'scripts', 'heartbeat.sh');
-      const proc = spawn('bash', [heartbeatScript], {
+      const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
+      const prompt = request.body.prompt || 'Process any pending messages.';
+      const proc = spawn('bash', [runAgentScript, prompt], {
         cwd: basePath,
         detached: true,
         stdio: 'ignore',

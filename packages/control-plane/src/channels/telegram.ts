@@ -196,12 +196,13 @@ async function getAgentStatus() {
   };
 }
 
-async function triggerAgentRun(): Promise<void> {
+async function triggerAgentRun(prompt?: string): Promise<void> {
   const basePath = getBasePath();
-  const heartbeatScript = path.join(basePath, 'scripts', 'heartbeat.sh');
+  const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('bash', [heartbeatScript], {
+    const args = prompt ? [runAgentScript, prompt] : [runAgentScript];
+    const proc = spawn('bash', args, {
       cwd: basePath,
       detached: true,
       stdio: 'ignore',

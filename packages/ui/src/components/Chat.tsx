@@ -108,7 +108,7 @@ export function Chat() {
           </button>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Messages are queued in INBOX.md. The agent will respond on the next run.
+          Messages are sent to the agent for immediate processing.
         </p>
       </form>
     </div>

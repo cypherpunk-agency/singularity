@@ -46,8 +46,13 @@ services:
       # Scripts (for development - can remove in production)
       - ../scripts:/app/scripts:ro
 
-      # Note: packages are built into the container image
-      # Don't mount from host as pnpm symlinks don't work cross-platform
+      # Packages source (for live editing)
+      - ../packages:/app/packages
+      # Keep node_modules inside container (pnpm symlinks don't work cross Windows/Linux)
+      - /app/node_modules
+      - /app/packages/shared/node_modules
+      - /app/packages/control-plane/node_modules
+      - /app/packages/ui/node_modules
 
     # Keep container running
     tty: true

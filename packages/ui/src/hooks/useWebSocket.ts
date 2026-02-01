@@ -7,43 +7,8 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef<number | null>(null);
   const { addMessage, updateStatus, fetchStatus, fetchFiles } = useStore();
 
-  const connect = useCallback(() => {
-    // Determine WebSocket URL based on current location
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-    console.log('Connecting to WebSocket:', wsUrl);
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as WSEvent;
-        handleEvent(data);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      wsRef.current = null;
-
-      // Reconnect after 3 seconds
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        connect();
-      }, 3000);
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    wsRef.current = ws;
-  }, []);
+  // Use ref to always access the latest handleEvent, avoiding stale closure
+  const handleEventRef = useRef<(event: WSEvent | { type: string; payload?: unknown }) => void>(() => {});
 
   const handleEvent = useCallback((event: WSEvent | { type: string; payload?: unknown }) => {
     switch (event.type) {
@@ -86,6 +51,49 @@ export function useWebSocket() {
         console.log('Unknown WebSocket event:', event.type);
     }
   }, [addMessage, updateStatus, fetchStatus, fetchFiles]);
+
+  // Keep the ref updated with the latest handleEvent
+  useEffect(() => {
+    handleEventRef.current = handleEvent;
+  }, [handleEvent]);
+
+  const connect = useCallback(() => {
+    // Determine WebSocket URL based on current location
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+    console.log('Connecting to WebSocket:', wsUrl);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as WSEvent;
+        handleEventRef.current(data);  // Always uses latest handler via ref
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      wsRef.current = null;
+
+      // Reconnect after 3 seconds
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        connect();
+      }, 3000);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    wsRef.current = ws;
+  }, []);
 
   useEffect(() => {
     connect();

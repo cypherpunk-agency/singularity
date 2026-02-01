@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     sqlite3 \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm

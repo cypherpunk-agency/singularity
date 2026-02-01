@@ -68,7 +68,7 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Body: TriggerRunRequest;
     Reply: TriggerRunResponse;
-  }>('/api/agent/run', async (_request, reply) => {
+  }>('/api/agent/run', async (request, reply) => {
     const basePath = getBasePath();
 
     // Check if agent is already running

@@ -120,6 +120,7 @@ export interface SendMessageResponse {
 
 export interface TriggerRunRequest {
   immediate?: boolean;
+  prompt?: string;
 }
 
 export interface TriggerRunResponse {

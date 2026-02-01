@@ -1,12 +1,23 @@
 import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { AgentStatus, RunHistoryEntry, TriggerRunRequest, TriggerRunResponse } from '@singularity/shared';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
   return process.env.APP_DIR || '/app';
+}
+
+// Check if the lock file is actually locked using flock
+function isLockHeld(lockPath: string): boolean {
+  try {
+    // Try to acquire lock non-blocking - if it succeeds, no one else has it
+    execSync(`flock -n "${lockPath}" -c 'exit 0'`, { stdio: 'ignore' });
+    return false; // Lock was available, so not held
+  } catch {
+    return true; // Lock acquisition failed, someone else has it
+  }
 }
 
 export async function registerAgentRoutes(fastify: FastifyInstance) {
@@ -37,14 +48,9 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       // No history file
     }
 
-    // Check if agent is currently running by looking for lock file
-    let status: 'idle' | 'running' | 'error' = 'idle';
-    try {
-      await fs.access(path.join(basePath, 'state', 'agent.lock'));
-      status = 'running';
-    } catch {
-      // No lock file, agent is idle
-    }
+    // Check if agent is currently running by testing if lock file is held
+    const lockPath = path.join(basePath, 'state', 'agent.lock');
+    const status: 'idle' | 'running' | 'error' = isLockHeld(lockPath) ? 'running' : 'idle';
 
     // Calculate next scheduled run (next hour)
     const now = new Date();
@@ -72,11 +78,9 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     const basePath = getBasePath();
 
     // Check if agent is already running
-    try {
-      await fs.access(path.join(basePath, 'state', 'agent.lock'));
+    const lockPath = path.join(basePath, 'state', 'agent.lock');
+    if (isLockHeld(lockPath)) {
       return { success: false, message: 'Agent is already running' };
-    } catch {
-      // Good, agent is not running
     }
 
     // Trigger the agent script with optional prompt

@@ -4,11 +4,22 @@ import { WSManager } from '../ws/events.js';
 import { appendToInbox, getRecentConversation } from '../conversation.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
   return process.env.APP_DIR || '/app';
+}
+
+// Check if the lock file is actually locked using flock
+function isLockHeld(lockPath: string): boolean {
+  try {
+    // Try to acquire lock non-blocking - if it succeeds, no one else has it
+    execSync(`flock -n "${lockPath}" -c 'exit 0'`, { stdio: 'ignore' });
+    return false; // Lock was available, so not held
+  } catch {
+    return true; // Lock acquisition failed, someone else has it
+  }
 }
 
 let bot: Bot | null = null;
@@ -172,13 +183,8 @@ async function getAgentStatus() {
     // No history file
   }
 
-  let status: 'idle' | 'running' | 'error' = 'idle';
-  try {
-    await fs.access(path.join(basePath, 'state', 'agent.lock'));
-    status = 'running';
-  } catch {
-    // No lock file
-  }
+  const lockPath = path.join(basePath, 'state', 'agent.lock');
+  const status: 'idle' | 'running' | 'error' = isLockHeld(lockPath) ? 'running' : 'idle';
 
   const now = new Date();
   const nextHour = new Date(now);

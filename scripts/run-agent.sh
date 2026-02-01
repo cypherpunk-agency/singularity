@@ -24,6 +24,21 @@ HISTORY_FILE="${STATE_DIR}/run-history.jsonl"
 # Model configuration
 MODEL="${AGENT_MODEL:-sonnet}"
 
+# Lock file for preventing concurrent runs
+LOCK_FILE="${STATE_DIR}/agent.lock"
+
+# Acquire exclusive lock (non-blocking)
+# This ensures only one agent instance runs at a time
+mkdir -p "$STATE_DIR"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another agent is already running. Exiting."
+    exit 1
+fi
+
+# Lock acquired - write PID to lock file for debugging
+echo $$ >&200
+
 # Determine mode based on arguments
 PROMPT="${1:-}"
 if [ -n "$PROMPT" ]; then

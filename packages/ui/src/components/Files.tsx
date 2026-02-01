@@ -1,10 +1,16 @@
+import { useEffect } from 'react';
 import { useStore } from '../store';
 import { FileViewer } from './FileViewer';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 
 export function Files() {
-  const { files, filesLoading, selectedFile, selectFile } = useStore();
+  const { files, filesLoading, selectedFile, selectFile, fetchFiles } = useStore();
+
+  // Fetch files when component mounts (tab becomes active)
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;

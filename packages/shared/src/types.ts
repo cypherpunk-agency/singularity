@@ -11,6 +11,7 @@ export interface Message {
   from: 'human' | 'agent';
   channel: Channel;
   timestamp: string; // ISO 8601
+  processedAt?: string; // ISO 8601 - when message was sent to agent for processing
 }
 
 export interface ConversationEntry {
@@ -65,6 +66,27 @@ export interface AgentOutput {
   costUsd?: number;
   durationMs?: number;
   sessionId?: string;
+}
+
+// Session data (combines input + output files for a run)
+export interface AgentSession {
+  id: string; // timestamp ID like "20260201-214301"
+  timestamp: string; // ISO 8601
+  inputFile: string | null; // path to input .md file
+  outputFile: string | null; // path to output .md file
+  jsonFile: string | null; // path to output .json file
+  metadata: {
+    type?: 'result';
+    subtype?: 'success' | 'error';
+    duration_ms?: number;
+    duration_api_ms?: number;
+    num_turns?: number;
+    result?: string;
+    session_id?: string;
+    total_cost_usd?: number;
+    usage?: any;
+    modelUsage?: any;
+  };
 }
 
 // WebSocket event types

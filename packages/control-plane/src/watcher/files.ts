@@ -176,6 +176,21 @@ async function processRunHistoryChange(
         entry.exit_code === 0
       );
       console.log(`Agent run completed: ${entry.runId || 'unknown'} (${entry.type}${entry.channel ? ':' + entry.channel : ''})`);
+
+      // Check for unprocessed messages and re-trigger if any exist
+      // Small delay to ensure lock is released
+      setTimeout(async () => {
+        try {
+          const { hasUnprocessedMessages, triggerAgentRun } = await import('../utils/agent.js');
+
+          if (await hasUnprocessedMessages()) {
+            console.log('[watcher] Unprocessed messages detected after agent completion, re-triggering');
+            await triggerAgentRun({ type: 'chat' });
+          }
+        } catch (error) {
+          console.error('[watcher] Failed to check/re-trigger for unprocessed messages:', error);
+        }
+      }, 500);
     } catch {
       // Invalid entry, skip
     }

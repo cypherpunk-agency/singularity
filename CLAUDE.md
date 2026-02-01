@@ -1,4 +1,5 @@
 - read @README.md
 - read @config/SOUL.md
 - the repo is also mounted in the container, so in most cases we don't need to rebuild the image
+- always use `-u agent` when running `docker exec` to avoid creating root-owned files in the mounted volume (e.g., `docker exec -u agent singularity-agent npm run build`)
 - don't use --no-cache for docker build unless the user allows it

@@ -15,6 +15,11 @@
 | `packages/control-plane/src/conversation.ts` | Per-channel conversation storage and retrieval |
 | `packages/control-plane/src/channels/telegram.ts` | Telegram bot integration |
 | `packages/control-plane/src/utils/agent.ts` | Agent triggering with channel/type support |
+| `packages/control-plane/src/api/sessions.ts` | Session listing and retrieval |
+| `packages/control-plane/src/context/` | Intelligent context preparation module |
+| `packages/control-plane/src/context/prepare.ts` | Main context assembly logic |
+| `packages/control-plane/src/context/memory-search.ts` | Vector search integration |
+| `packages/control-plane/src/context/tokens.ts` | Token estimation utilities |
 | `packages/ui/src/components/Layout.tsx` | Main layout, nav items |
 | `packages/ui/src/store.ts` | Zustand state |
 | `packages/ui/src/lib/api.ts` | API client |
@@ -68,9 +73,12 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 | `GET /api/files/search` | `api/files.ts` | Vector search via memory-search.py |
 | `GET /api/status` | `api/agent.ts` | Lock file check, next run calc |
 | `POST /api/agent/run` | `api/agent.ts` | Body: `{type, channel, prompt}` |
+| `GET /api/agent/context` | `api/agent.ts` | Preview prepared context |
 | `GET /api/runs` | `api/agent.ts` | Query: `limit` (default 50) |
 | `GET /api/outputs` | `api/outputs.ts` | Query: `limit` (default 20) |
 | `GET /api/outputs/:id` | `api/outputs.ts` | ID sanitized |
+| `GET /api/sessions` | `api/sessions.ts` | Query: `limit` |
+| `GET /api/sessions/:id` | `api/sessions.ts` | Full session with input/output |
 | `GET /api/debug/conversations` | `api/debug.ts` | View all recent conversations |
 | `GET /api/debug/conversations/:channel` | `api/debug.ts` | View channel conversations |
 | `GET /api/debug/runs` | `api/debug.ts` | View recent agent runs |
@@ -84,6 +92,8 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 | Event | Direction | Trigger |
 |-------|-----------|---------|
 | `file:changed` | S->C | File watcher detects change |
+| `file:created` | S->C | New file created |
+| `file:deleted` | S->C | File deleted |
 | `agent:started` | S->C | Lock file created |
 | `agent:completed` | S->C | run-history.jsonl updated |
 | `chat:received` | S->C | New line in conversation/web/*.jsonl or conversation/telegram/*.jsonl |

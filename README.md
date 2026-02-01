@@ -182,6 +182,8 @@ Two-layer memory architecture:
 
 Vector search enables semantic retrieval across all memory files using local embeddings (no API keys required). The search runs in a separate container for faster agent container builds.
 
+See [docs/CONTEXT.md](docs/CONTEXT.md) for details on intelligent context preparation.
+
 ## API Reference
 
 ### REST Endpoints
@@ -195,10 +197,15 @@ Vector search enables semantic retrieval across all memory files using local emb
 | `GET` | `/api/files` | List workspace files |
 | `GET` | `/api/files/:path` | Read file content |
 | `PUT` | `/api/files/:path` | Update file content |
+| `GET` | `/api/files/search?q=query` | Vector search across memory files |
 | `GET` | `/api/status` | Agent status |
 | `POST` | `/api/agent/run` | Trigger immediate run |
+| `GET` | `/api/agent/context` | Get prepared context without running agent |
 | `GET` | `/api/outputs` | List agent outputs |
+| `GET` | `/api/outputs/:id` | Get specific output file |
 | `GET` | `/api/runs` | Get run history |
+| `GET` | `/api/sessions` | List agent sessions |
+| `GET` | `/api/sessions/:id` | Get full session with input/output |
 | `GET` | `/api/debug/conversations` | View all recent conversations |
 | `GET` | `/api/debug/conversations/:channel` | View channel conversations |
 | `GET` | `/api/debug/runs` | View recent agent runs |
@@ -209,6 +216,8 @@ Vector search enables semantic retrieval across all memory files using local emb
 | Event | Direction | Description |
 |-------|-----------|-------------|
 | `file:changed` | Server→Client | File was modified |
+| `file:created` | Server→Client | New file created |
+| `file:deleted` | Server→Client | File deleted |
 | `agent:started` | Server→Client | Agent run started |
 | `agent:completed` | Server→Client | Agent run finished |
 | `chat:received` | Server→Client | New chat message |

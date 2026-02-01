@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Markdown from 'react-markdown';
 import { useStore } from '../store';
 import * as api from '../lib/api';
 import clsx from 'clsx';
@@ -101,6 +102,10 @@ export function FileViewer() {
               'focus:outline-none focus:border-primary-500'
             )}
           />
+        ) : selectedFile?.endsWith('.md') ? (
+          <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300">
+            <Markdown>{fileContent || ''}</Markdown>
+          </div>
         ) : (
           <pre className="text-slate-100 font-mono text-sm whitespace-pre-wrap">
             {fileContent}

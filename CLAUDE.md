@@ -1,3 +1,4 @@
 - read @README.md
+- read @config/SOUL.md
 - the repo is also mounted in the container, so in most cases we don't need to rebuild the image
 - don't use --no-cache for docker build unless the user allows it

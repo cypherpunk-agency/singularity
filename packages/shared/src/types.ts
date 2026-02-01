@@ -1,9 +1,15 @@
+// Channel type for message routing
+export type Channel = 'web' | 'telegram';
+
+// Run type for agent context
+export type RunType = 'chat' | 'cron';
+
 // Message types for chat interface
 export interface Message {
   id: string;
   text: string;
   from: 'human' | 'agent';
-  channel: 'web' | 'telegram';
+  channel: Channel;
   timestamp: string; // ISO 8601
 }
 
@@ -110,7 +116,12 @@ export interface StatusUpdatePayload {
 // API request/response types
 export interface SendMessageRequest {
   text: string;
-  channel?: 'web' | 'telegram';
+  channel?: Channel;
+}
+
+export interface RespondMessageRequest {
+  text: string;
+  channel?: Channel;
 }
 
 export interface SendMessageResponse {
@@ -121,6 +132,8 @@ export interface SendMessageResponse {
 export interface TriggerRunRequest {
   immediate?: boolean;
   prompt?: string;
+  channel?: Channel;
+  type?: RunType;
 }
 
 export interface TriggerRunResponse {

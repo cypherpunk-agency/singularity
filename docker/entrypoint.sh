@@ -8,8 +8,10 @@ echo "[$(date -Iseconds)] Singularity Agent starting..."
 
 # Ensure directories exist with proper permissions
 mkdir -p /app/agent/memory
-mkdir -p /app/agent/conversation
+mkdir -p /app/agent/conversation/web
+mkdir -p /app/agent/conversation/telegram
 mkdir -p /app/logs/agent-output
+mkdir -p /app/logs/agent-input
 mkdir -p /app/state
 mkdir -p /home/agent/.claude
 chown -R agent:agent /app/agent /app/logs /app/state /home/agent/.claude
@@ -45,36 +47,6 @@ EOF
     echo "[$(date -Iseconds)] Created initial MEMORY.md"
 fi
 
-# Initialize HEARTBEAT.md if not exists
-if [ ! -f /app/agent/HEARTBEAT.md ]; then
-    cat > /app/agent/HEARTBEAT.md << 'EOF'
-# Agent Heartbeat Tasks
-
-Add tasks here for the agent to process on each heartbeat.
-Empty this file or leave only comments to skip processing.
-
-## Tasks
-
-_No tasks pending._
-EOF
-    chown agent:agent /app/agent/HEARTBEAT.md
-    echo "[$(date -Iseconds)] Created initial HEARTBEAT.md"
-fi
-
-# Initialize INBOX.md if not exists
-if [ ! -f /app/agent/INBOX.md ]; then
-    cat > /app/agent/INBOX.md << 'EOF'
-# Inbox
-
-Messages from humans will appear here. Process them and respond in the conversation log.
-
----
-
-EOF
-    chown agent:agent /app/agent/INBOX.md
-    echo "[$(date -Iseconds)] Created initial INBOX.md"
-fi
-
 # Initialize run history if not exists
 if [ ! -f /app/state/run-history.jsonl ]; then
     touch /app/state/run-history.jsonl
@@ -91,10 +63,10 @@ printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH|HOME)' > /etc/environment
 echo "[$(date -Iseconds)] Starting cron daemon..."
 cron
 
-# Start control plane in background
+# Start control plane in background (as agent user)
 echo "[$(date -Iseconds)] Starting control plane..."
 cd /app
-node /app/packages/control-plane/dist/index.js &
+su -s /bin/bash agent -c 'node /app/packages/control-plane/dist/index.js' &
 CONTROL_PLANE_PID=$!
 echo "[$(date -Iseconds)] Control plane started (PID: $CONTROL_PLANE_PID)"
 

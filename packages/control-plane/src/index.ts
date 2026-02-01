@@ -7,6 +7,7 @@ import { registerChatRoutes } from './api/chat.js';
 import { registerFilesRoutes } from './api/files.js';
 import { registerAgentRoutes } from './api/agent.js';
 import { registerOutputsRoutes } from './api/outputs.js';
+import { registerDebugRoutes } from './api/debug.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
@@ -65,14 +66,15 @@ async function main() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // Register API routes
-  await registerChatRoutes(fastify);
+  // Setup WebSocket first (before routes)
+  const wsManager = setupWebSocket(fastify);
+
+  // Register API routes (now they can use wsManager)
+  await registerChatRoutes(fastify, wsManager);
   await registerFilesRoutes(fastify);
   await registerAgentRoutes(fastify);
   await registerOutputsRoutes(fastify);
-
-  // Setup WebSocket
-  const wsManager = setupWebSocket(fastify);
+  await registerDebugRoutes(fastify);
 
   // Start file watcher
   startFileWatcher(wsManager);

@@ -1,10 +1,11 @@
 #!/bin/bash
 # Singularity Agent Runner
-# Unified script for heartbeat and regular agent calls
+# Unified script for heartbeat/cron and chat agent calls
 #
 # Usage:
-#   run-agent.sh              # Heartbeat mode: SOUL + HEARTBEAT + "Begin heartbeat."
-#   run-agent.sh "prompt"     # Regular mode: SOUL only + custom prompt
+#   run-agent.sh --type cron                    # Cron mode: SOUL + HEARTBEAT
+#   run-agent.sh --type chat --channel web      # Chat mode: SOUL + CONVERSATION + history
+#   run-agent.sh --type chat --channel telegram # Chat mode for telegram
 
 set -e
 
@@ -12,12 +13,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="/app"
 CONFIG_DIR="${APP_DIR}/config"
+AGENT_DIR="${APP_DIR}/agent"
 STATE_DIR="${APP_DIR}/state"
 LOGS_DIR="${APP_DIR}/logs"
-CONVERSATION_DIR="${APP_DIR}/agent/conversation"
 
 SOUL_FILE="${CONFIG_DIR}/SOUL.md"
 HEARTBEAT_FILE="${CONFIG_DIR}/HEARTBEAT.md"
+CONVERSATION_FILE="${CONFIG_DIR}/CONVERSATION.md"
 SESSION_FILE="${STATE_DIR}/session-id.txt"
 HISTORY_FILE="${STATE_DIR}/run-history.jsonl"
 
@@ -28,7 +30,6 @@ MODEL="${AGENT_MODEL:-sonnet}"
 LOCK_FILE="${STATE_DIR}/agent.lock"
 
 # Acquire exclusive lock (non-blocking)
-# This ensures only one agent instance runs at a time
 mkdir -p "$STATE_DIR"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
@@ -39,13 +40,34 @@ fi
 # Lock acquired - write PID to lock file for debugging
 echo $$ >&200
 
-# Determine mode based on arguments
-PROMPT="${1:-}"
-if [ -n "$PROMPT" ]; then
-    MODE="regular"
-else
-    MODE="heartbeat"
-fi
+# Parse arguments
+TYPE="chat"
+CHANNEL=""
+CUSTOM_PROMPT=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
+        --channel)
+            CHANNEL="$2"
+            shift 2
+            ;;
+        --prompt)
+            CUSTOM_PROMPT="$2"
+            shift 2
+            ;;
+        *)
+            # Legacy: treat first positional arg as prompt
+            if [[ -z "$CUSTOM_PROMPT" ]]; then
+                CUSTOM_PROMPT="$1"
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Logging functions
 log() {
@@ -78,11 +100,75 @@ build_system_prompt() {
         prompt=$(cat "$SOUL_FILE")
     fi
 
-    # Only include HEARTBEAT.md for heartbeat mode
-    if [ "$MODE" = "heartbeat" ] && [ -f "$HEARTBEAT_FILE" ]; then
-        prompt="${prompt}
+    if [[ "$TYPE" == "cron" ]]; then
+        # Cron mode: SOUL + HEARTBEAT
+        if [ -f "$HEARTBEAT_FILE" ]; then
+            prompt="${prompt}
 
 $(cat "$HEARTBEAT_FILE")"
+        fi
+    else
+        # Chat mode: SOUL + CONVERSATION + conversation history
+        if [ -f "$CONVERSATION_FILE" ]; then
+            prompt="${prompt}
+
+$(cat "$CONVERSATION_FILE")"
+        fi
+
+        # Include channel-specific conversation history
+        if [[ -n "$CHANNEL" ]]; then
+            local conv_dir="${AGENT_DIR}/conversation/${CHANNEL}"
+            local today=$(date +%Y-%m-%d)
+            local conv_file="${conv_dir}/${today}.jsonl"
+
+            prompt="${prompt}
+
+## Recent Conversation (${CHANNEL})"
+
+            if [[ -f "$conv_file" ]]; then
+                # Get last 30 messages and format them
+                local history=""
+                history=$(tail -30 "$conv_file" 2>/dev/null | while IFS= read -r line; do
+                    local from=$(echo "$line" | jq -r '.from // "unknown"' 2>/dev/null)
+                    local text=$(echo "$line" | jq -r '.text // ""' 2>/dev/null)
+                    local ts=$(echo "$line" | jq -r '.timestamp // ""' 2>/dev/null)
+                    local time=$(echo "$ts" | cut -d'T' -f2 | cut -d'.' -f1 2>/dev/null || echo "")
+                    local role=$([[ "$from" == "human" ]] && echo "Human" || echo "Agent")
+                    echo "[${time}] ${role}: ${text}"
+                done)
+
+                if [[ -n "$history" ]]; then
+                    prompt="${prompt}
+${history}"
+                else
+                    prompt="${prompt}
+No previous messages in this conversation."
+                fi
+            else
+                prompt="${prompt}
+No previous messages in this conversation."
+            fi
+
+            prompt="${prompt}
+
+**Channel:** ${CHANNEL}
+**Respond using:** curl -X POST http://localhost:3001/api/chat/respond -H 'Content-Type: application/json' -d '{\"text\": \"YOUR_RESPONSE\", \"channel\": \"${CHANNEL}\"}'"
+        fi
+    fi
+
+    # Always include cross-session memory
+    if [ -f "${AGENT_DIR}/MEMORY.md" ]; then
+        prompt="${prompt}
+
+## Cross-Session Memory
+$(cat "${AGENT_DIR}/MEMORY.md")"
+    fi
+
+    if [ -f "${AGENT_DIR}/TASKS.md" ]; then
+        prompt="${prompt}
+
+## Current Tasks
+$(cat "${AGENT_DIR}/TASKS.md")"
     fi
 
     echo "$prompt"
@@ -138,8 +224,10 @@ log_result_summary() {
 
 # Ensure directories exist
 ensure_dirs() {
-    mkdir -p "$CONVERSATION_DIR"
+    mkdir -p "${AGENT_DIR}/conversation/web"
+    mkdir -p "${AGENT_DIR}/conversation/telegram"
     mkdir -p "${LOGS_DIR}/agent-output"
+    mkdir -p "${LOGS_DIR}/agent-input"
     mkdir -p "$STATE_DIR"
 }
 
@@ -153,10 +241,16 @@ main() {
         session_id=$(cat "$SESSION_FILE")
     fi
 
-    log_header "SINGULARITY AGENT RUN ($MODE)"
+    # Generate run ID
+    local run_id
+    run_id=$(date +%Y%m%d-%H%M%S)
+
+    log_header "SINGULARITY AGENT RUN (${TYPE}${CHANNEL:+:$CHANNEL})"
 
     log_section "Configuration"
-    log_kv "Mode" "$MODE"
+    log_kv "Run ID" "$run_id"
+    log_kv "Type" "$TYPE"
+    log_kv "Channel" "${CHANNEL:-N/A}"
     log_kv "Session" "${session_id:0:8}..."
     log_kv "Model" "$MODEL"
     log_kv "Working Dir" "$APP_DIR"
@@ -165,23 +259,54 @@ main() {
     local system_prompt
     system_prompt=$(build_system_prompt)
 
-    # User prompt - default to "Begin heartbeat." for heartbeat mode
-    local user_prompt="${PROMPT:-Begin heartbeat.}"
+    # Determine user prompt
+    local user_prompt
+    if [[ -n "$CUSTOM_PROMPT" ]]; then
+        user_prompt="$CUSTOM_PROMPT"
+    elif [[ "$TYPE" == "cron" ]]; then
+        user_prompt="Begin heartbeat."
+    else
+        user_prompt="Process the incoming message and respond via the API."
+    fi
+
     log_kv "Prompt" "${user_prompt:0:50}$([ ${#user_prompt} -gt 50 ] && echo '...')"
+
+    # Save input for debugging
+    local input_log_dir="${LOGS_DIR}/agent-input"
+    local input_log_file="${input_log_dir}/${run_id}-input.md"
+
+    cat > "$input_log_file" << EOF
+# Agent Run Input
+**Run ID:** ${run_id}
+**Type:** ${TYPE}
+**Channel:** ${CHANNEL:-N/A}
+**Timestamp:** $(date -Iseconds)
+
+## System Prompt
+${system_prompt}
+
+## User Prompt
+${user_prompt}
+EOF
+
+    log "Input logged to: $input_log_file"
 
     # Run the agent
     local start_time
     start_time=$(date +%s)
 
-    local timestamp
-    timestamp=$(date +%Y%m%d-%H%M%S)
-    local output_file="${LOGS_DIR}/agent-output/${timestamp}.json"
-    local readable_file="${LOGS_DIR}/agent-output/${timestamp}.md"
+    local output_file="${LOGS_DIR}/agent-output/${run_id}.json"
+    local readable_file="${LOGS_DIR}/agent-output/${run_id}.md"
     local exit_code=0
 
     log_section "Execution"
     log "Starting agent..."
     log "Live output: $readable_file"
+
+    # Create a temp file for the system prompt
+    local system_prompt_file
+    system_prompt_file=$(mktemp)
+    echo "$system_prompt" > "$system_prompt_file"
 
     # Run Claude CLI and pipe through stream processor
     if claude \
@@ -189,14 +314,16 @@ main() {
         --verbose \
         --output-format stream-json \
         --model "$MODEL" \
-        --append-system-prompt "$system_prompt" \
-        --allowedTools "Bash(git:*) Edit Read Write Glob Grep" \
+        --append-system-prompt "$(cat "$system_prompt_file")" \
+        --allowedTools "Bash(git:*) Bash(curl:*) Edit Read Write Glob Grep" \
         --dangerously-skip-permissions \
         "$user_prompt" 2>&1 | "${SCRIPT_DIR}/stream-to-md.sh" "$readable_file" "$output_file"; then
         exit_code=0
     else
         exit_code=$?
     fi
+
+    rm -f "$system_prompt_file"
 
     local end_time
     end_time=$(date +%s)
@@ -211,23 +338,31 @@ main() {
 
     local history_entry
     history_entry=$(jq -n \
+        --arg run_id "$run_id" \
         --arg ts "$(date -Iseconds)" \
         --arg session "$session_id" \
-        --arg mode "$MODE" \
+        --arg type "$TYPE" \
+        --arg channel "$CHANNEL" \
         --arg prompt "$user_prompt" \
         --argjson duration "$duration" \
         --argjson exit_code "$exit_code" \
         --argjson cost "$cost" \
+        --arg input_file "$input_log_file" \
         --arg output_file "$output_file" \
+        --arg readable_file "$readable_file" \
         '{
+            runId: $run_id,
             timestamp: $ts,
             session_id: $session,
-            mode: $mode,
+            type: $type,
+            channel: (if $channel == "" then null else $channel end),
             prompt: $prompt,
             duration_seconds: $duration,
             exit_code: $exit_code,
             cost_usd: $cost,
-            output_file: $output_file
+            inputFile: $input_file,
+            outputFile: $output_file,
+            readableFile: $readable_file
         }'
     )
 
@@ -235,6 +370,7 @@ main() {
 
     log_section "Complete"
     log_kv "Total time" "${duration}s"
+    log_kv "Input log" "$input_log_file"
     log_kv "JSON output" "$output_file"
     log_kv "Readable" "$readable_file"
     echo ""

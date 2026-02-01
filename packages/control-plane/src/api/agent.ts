@@ -1,24 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
 import { AgentStatus, RunHistoryEntry, TriggerRunRequest, TriggerRunResponse } from '@singularity/shared';
-
-// Get base path (use APP_DIR env or default)
-function getBasePath(): string {
-  return process.env.APP_DIR || '/app';
-}
-
-// Check if the lock file is actually locked using flock
-function isLockHeld(lockPath: string): boolean {
-  try {
-    // Try to acquire lock non-blocking - if it succeeds, no one else has it
-    execSync(`flock -n "${lockPath}" -c 'exit 0'`, { stdio: 'ignore' });
-    return false; // Lock was available, so not held
-  } catch {
-    return true; // Lock acquisition failed, someone else has it
-  }
-}
+import { getBasePath, isLockHeld, triggerAgentRun } from '../utils/agent.js';
 
 export async function registerAgentRoutes(fastify: FastifyInstance) {
   // Get agent status
@@ -75,26 +59,15 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     Body: TriggerRunRequest;
     Reply: TriggerRunResponse;
   }>('/api/agent/run', async (request, reply) => {
-    const basePath = getBasePath();
-
-    // Check if agent is already running
-    const lockPath = path.join(basePath, 'state', 'agent.lock');
-    if (isLockHeld(lockPath)) {
-      return { success: false, message: 'Agent is already running' };
-    }
-
-    // Trigger the agent script with optional prompt
     try {
-      const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
-      const prompt = request.body.prompt || 'Process any pending messages.';
-      const proc = spawn('bash', [runAgentScript, prompt], {
-        cwd: basePath,
-        detached: true,
-        stdio: 'ignore',
-      });
-      proc.unref();
+      const { prompt, channel, type = 'cron' } = request.body;
+      const triggered = triggerAgentRun({ prompt, channel, type });
 
-      return { success: true, message: 'Agent run triggered' };
+      if (!triggered) {
+        return { success: false, message: 'Agent is already running' };
+      }
+
+      return { success: true, message: `Agent ${type} run triggered${channel ? ` for ${channel}` : ''}` };
     } catch (error) {
       fastify.log.error(error, 'Failed to trigger agent run');
       reply.code(500).send({ success: false, message: 'Failed to trigger agent run' });

@@ -6,4 +6,4 @@ SHELL=/bin/bash
 # All times are in container timezone (default: UTC)
 
 # Hourly heartbeat - runs at the top of each hour
-0 * * * * /app/scripts/run-agent.sh >> /app/logs/heartbeat.log 2>&1
+0 * * * * /app/scripts/run-agent.sh --type cron >> /app/logs/heartbeat.log 2>&1

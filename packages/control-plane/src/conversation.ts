@@ -1,25 +1,23 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Message } from '@singularity/shared';
+import { Message, Channel } from '@singularity/shared';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
   return process.env.APP_DIR || '/app';
 }
 
-function getInboxPath(): string {
+function getConversationDir(channel?: Channel): string {
   const base = getBasePath();
-  return path.join(base, 'agent', 'INBOX.md');
-}
-
-function getConversationDir(): string {
-  const base = getBasePath();
+  if (channel) {
+    return path.join(base, 'agent', 'conversation', channel);
+  }
   return path.join(base, 'agent', 'conversation');
 }
 
-function getConversationFile(date: string): string {
-  return path.join(getConversationDir(), `${date}.jsonl`);
+function getConversationFile(channel: Channel, date: string): string {
+  return path.join(getConversationDir(channel), `${date}.jsonl`);
 }
 
 function getTodayDate(): string {
@@ -27,42 +25,11 @@ function getTodayDate(): string {
 }
 
 /**
- * Append a message to INBOX.md for the agent to process
+ * Append a message to the channel-specific conversation log
  */
-export async function appendToInbox(text: string, channel: 'web' | 'telegram'): Promise<Message> {
-  const message: Message = {
-    id: uuidv4(),
-    text,
-    from: 'human',
-    channel,
-    timestamp: new Date().toISOString(),
-  };
-
-  const inboxPath = getInboxPath();
-
-  // Ensure inbox file exists
-  try {
-    await fs.access(inboxPath);
-  } catch {
-    await fs.writeFile(inboxPath, '# Inbox\n\nMessages from humans will appear here. Process them and respond in the conversation log.\n\n---\n\n');
-  }
-
-  // Append message to inbox
-  const formattedMessage = `### Message from ${channel} (${message.timestamp})\n\n${text}\n\n---\n\n`;
-  await fs.appendFile(inboxPath, formattedMessage);
-
-  // Also log to conversation history
-  await appendToConversation(message);
-
-  return message;
-}
-
-/**
- * Append a message to today's conversation log
- */
-export async function appendToConversation(message: Message): Promise<void> {
-  const conversationDir = getConversationDir();
-  const conversationFile = getConversationFile(getTodayDate());
+export async function appendToConversation(channel: Channel, message: Message): Promise<void> {
+  const conversationDir = getConversationDir(channel);
+  const conversationFile = getConversationFile(channel, getTodayDate());
 
   // Ensure conversation directory exists
   await fs.mkdir(conversationDir, { recursive: true });
@@ -72,11 +39,43 @@ export async function appendToConversation(message: Message): Promise<void> {
 }
 
 /**
- * Get conversation history for a specific date
+ * Create and save a human message to the conversation
  */
-export async function getConversationHistory(date?: string): Promise<Message[]> {
+export async function saveHumanMessage(text: string, channel: Channel): Promise<Message> {
+  const message: Message = {
+    id: uuidv4(),
+    text,
+    from: 'human',
+    channel,
+    timestamp: new Date().toISOString(),
+  };
+
+  await appendToConversation(channel, message);
+  return message;
+}
+
+/**
+ * Create and save an agent response to the conversation
+ */
+export async function saveAgentResponse(text: string, channel: Channel): Promise<Message> {
+  const message: Message = {
+    id: uuidv4(),
+    text,
+    from: 'agent',
+    channel,
+    timestamp: new Date().toISOString(),
+  };
+
+  await appendToConversation(channel, message);
+  return message;
+}
+
+/**
+ * Get conversation history for a specific channel and date
+ */
+export async function getConversationHistory(channel: Channel, date?: string): Promise<Message[]> {
   const targetDate = date || getTodayDate();
-  const conversationFile = getConversationFile(targetDate);
+  const conversationFile = getConversationFile(channel, targetDate);
 
   try {
     const content = await fs.readFile(conversationFile, 'utf-8');
@@ -88,10 +87,10 @@ export async function getConversationHistory(date?: string): Promise<Message[]> 
 }
 
 /**
- * Get all available conversation dates
+ * Get all available conversation dates for a channel
  */
-export async function getConversationDates(): Promise<string[]> {
-  const conversationDir = getConversationDir();
+export async function getConversationDates(channel: Channel): Promise<string[]> {
+  const conversationDir = getConversationDir(channel);
 
   try {
     const files = await fs.readdir(conversationDir);
@@ -106,15 +105,36 @@ export async function getConversationDates(): Promise<string[]> {
 }
 
 /**
- * Get recent conversation history (last N days)
+ * Get recent messages from a channel
  */
-export async function getRecentConversation(days: number = 7): Promise<Message[]> {
-  const dates = await getConversationDates();
+export async function getRecentMessages(channel: Channel, limit: number = 50): Promise<Message[]> {
+  const dates = await getConversationDates(channel);
+
+  const allMessages: Message[] = [];
+  for (const date of dates.reverse()) {
+    const messages = await getConversationHistory(channel, date);
+    allMessages.push(...messages);
+
+    // Stop if we have enough messages
+    if (allMessages.length >= limit) {
+      break;
+    }
+  }
+
+  // Return the last N messages
+  return allMessages.slice(-limit);
+}
+
+/**
+ * Get recent conversation history (last N days) for a channel
+ */
+export async function getRecentConversation(channel: Channel, days: number = 7): Promise<Message[]> {
+  const dates = await getConversationDates(channel);
   const recentDates = dates.slice(0, days);
 
   const allMessages: Message[] = [];
   for (const date of recentDates.reverse()) {
-    const messages = await getConversationHistory(date);
+    const messages = await getConversationHistory(channel, date);
     allMessages.push(...messages);
   }
 
@@ -122,26 +142,61 @@ export async function getRecentConversation(days: number = 7): Promise<Message[]
 }
 
 /**
- * Clear processed messages from inbox
- * Called after agent processes messages
+ * Get all recent conversations across all channels
  */
-export async function clearInbox(): Promise<void> {
-  const inboxPath = getInboxPath();
-  await fs.writeFile(inboxPath, '# Inbox\n\nMessages from humans will appear here. Process them and respond in the conversation log.\n\n---\n\n');
+export async function getAllRecentConversations(limit: number = 20): Promise<{ web: Message[]; telegram: Message[] }> {
+  const [webMessages, telegramMessages] = await Promise.all([
+    getRecentMessages('web', limit),
+    getRecentMessages('telegram', limit),
+  ]);
+
+  return { web: webMessages, telegram: telegramMessages };
 }
 
 /**
- * Check if inbox has pending messages
+ * Prepare conversation history for agent context
+ * This is extensible for future enhancements like token counting, compaction, etc.
  */
-export async function hasInboxMessages(): Promise<boolean> {
-  const inboxPath = getInboxPath();
+export interface PrepareHistoryOptions {
+  channel: Channel;
+  maxMessages?: number;
+  // Future options:
+  // maxTokens?: number;
+  // includeMemory?: boolean;
+  // preserveImportant?: boolean;
+}
 
-  try {
-    const content = await fs.readFile(inboxPath, 'utf-8');
-    // Check if there's content after the header
-    const lines = content.split('---');
-    return lines.length > 1 && lines.slice(1).some(l => l.trim().length > 0);
-  } catch {
-    return false;
+export async function prepareHistory(options: PrepareHistoryOptions): Promise<string> {
+  const { channel, maxMessages = 30 } = options;
+
+  const messages = await getRecentMessages(channel, maxMessages);
+
+  if (messages.length === 0) {
+    return 'No previous conversation history.';
   }
+
+  // Format as readable conversation
+  return messages.map(m => {
+    const role = m.from === 'human' ? 'Human' : 'Agent';
+    const time = new Date(m.timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return `[${time}] ${role}: ${m.text}`;
+  }).join('\n');
+}
+
+// Legacy compatibility: Get conversation without channel (combines all channels)
+export async function getRecentConversationAll(days: number = 7): Promise<Message[]> {
+  const [webMessages, telegramMessages] = await Promise.all([
+    getRecentConversation('web', days),
+    getRecentConversation('telegram', days),
+  ]);
+
+  // Combine and sort by timestamp
+  const allMessages = [...webMessages, ...telegramMessages];
+  allMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  return allMessages;
 }

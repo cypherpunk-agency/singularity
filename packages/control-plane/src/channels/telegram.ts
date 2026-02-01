@@ -1,10 +1,11 @@
 import { Bot, Context } from 'grammy';
 import { TELEGRAM_COMMANDS } from '@singularity/shared';
 import { WSManager } from '../ws/events.js';
-import { appendToInbox, getRecentConversation } from '../conversation.js';
+import { saveHumanMessage, getRecentConversation } from '../conversation.js';
+import { triggerAgentRun } from '../utils/agent.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
@@ -78,9 +79,10 @@ Or just send any text to chat with the agent.`);
     if (!isAuthorized(ctx)) return;
 
     try {
-      const messages = await getRecentConversation(3);
+      // Get telegram conversation history
+      const messages = await getRecentConversation('telegram', 3);
       if (messages.length === 0) {
-        await ctx.reply('No recent conversation history.');
+        await ctx.reply('No recent Telegram conversation history.');
         return;
       }
 
@@ -112,8 +114,12 @@ Or just send any text to chat with the agent.`);
     if (!isAuthorized(ctx)) return;
 
     try {
-      await triggerAgentRun();
-      await ctx.reply('Agent run triggered!');
+      const triggered = triggerAgentRun({ type: 'cron' });
+      if (triggered) {
+        await ctx.reply('Agent run triggered!');
+      } else {
+        await ctx.reply('Agent is already running.');
+      }
     } catch (error) {
       await ctx.reply('Failed to trigger run: ' + error);
     }
@@ -132,9 +138,18 @@ Or just send any text to chat with the agent.`);
     if (text.startsWith('/')) return;
 
     try {
-      const message = await appendToInbox(text, 'telegram');
+      // Save message to telegram conversation channel
+      const message = await saveHumanMessage(text, 'telegram');
       wsManager.broadcastChatMessage(message);
-      await ctx.reply('Message sent to agent. It will respond on the next run (or use /run to trigger now).');
+
+      // Trigger agent with telegram channel context
+      const triggered = triggerAgentRun({ channel: 'telegram', type: 'chat' });
+
+      if (triggered) {
+        await ctx.reply('Message received. Agent is processing...');
+      } else {
+        await ctx.reply('Message received. Agent is currently running and will process this when done.');
+      }
     } catch (error) {
       await ctx.reply('Failed to send message: ' + error);
     }
@@ -148,9 +163,6 @@ Or just send any text to chat with the agent.`);
   // Start the bot
   bot.start();
   console.log('Telegram bot started');
-
-  // Set up listener for agent responses
-  setupResponseListener(wsManager);
 }
 
 function isAuthorized(ctx: Context): boolean {
@@ -171,7 +183,7 @@ async function getAgentStatus() {
     // No session file
   }
 
-  let lastRun: { timestamp: string; success: boolean } | null = null;
+  let lastRun: { timestamp: string; exit_code: number } | null = null;
   try {
     const historyPath = path.join(basePath, 'state', 'run-history.jsonl');
     const content = await fs.readFile(historyPath, 'utf-8');
@@ -196,42 +208,14 @@ async function getAgentStatus() {
   return {
     status,
     lastRun: lastRun?.timestamp || null,
-    lastRunSuccess: lastRun?.success ?? null,
+    lastRunSuccess: lastRun ? lastRun.exit_code === 0 : null,
     sessionId,
     nextScheduledRun: nextHour.toISOString(),
   };
 }
 
-async function triggerAgentRun(prompt?: string): Promise<void> {
-  const basePath = getBasePath();
-  const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
-
-  return new Promise((resolve, reject) => {
-    const args = prompt ? [runAgentScript, prompt] : [runAgentScript];
-    const proc = spawn('bash', args, {
-      cwd: basePath,
-      detached: true,
-      stdio: 'ignore',
-    });
-
-    proc.on('error', reject);
-    proc.unref();
-    resolve();
-  });
-}
-
-function setupResponseListener(_wsManager: WSManager): void {
-  // Listen for agent responses via file watcher events
-  // When a new agent message is detected, send it to Telegram
-  // This is handled by the file watcher which calls wsManager.broadcastChatMessage
-  // We need to subscribe to those events here
-
-  // Note: In a more complete implementation, we'd have an event emitter
-  // For now, we'll rely on the user checking Telegram after the agent runs
-}
-
 /**
- * Send a message to Telegram (called when agent responds)
+ * Send a message to Telegram (called when agent responds via /api/chat/respond)
  */
 export async function sendToTelegram(text: string): Promise<void> {
   if (!bot || !authorizedChatId) return;

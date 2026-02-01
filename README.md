@@ -63,7 +63,12 @@ The Control Center provides a web-based interface to interact with and monitor t
 
 Run a heartbeat manually:
 ```bash
-docker exec -u agent singularity-agent /app/scripts/heartbeat.sh
+docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type cron
+```
+
+Run a chat mode test:
+```bash
+docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type chat --channel web
 ```
 
 Check logs:
@@ -79,23 +84,49 @@ cat logs/heartbeat.log
 
 ```
 agent/
-├── HEARTBEAT.md      # Agent guidance and goals
 ├── TASKS.md          # Pending/completed tasks (agent-managed)
-├── MEMORY.md         # Long-term curated memory
-├── INBOX.md          # Messages from humans (control center writes here)
+├── MEMORY.md         # Long-term curated memory (cross-session)
 ├── memory/           # Daily activity logs
 │   └── YYYY-MM-DD.md
-└── conversation/     # Chat history
-    └── YYYY-MM-DD.jsonl
+└── conversation/     # Per-channel chat history
+    ├── web/
+    │   └── YYYY-MM-DD.jsonl
+    └── telegram/
+        └── YYYY-MM-DD.jsonl
+
+config/
+├── SOUL.md           # Core identity (all contexts)
+├── CONVERSATION.md   # Chat-specific instructions
+└── HEARTBEAT.md      # Cron-specific instructions
+
+logs/
+├── agent-input/      # Full context sent to Claude (for debugging)
+│   └── YYYYMMDD-HHMMSS-input.md
+├── agent-output/     # Claude responses
+│   ├── YYYYMMDD-HHMMSS.json
+│   └── YYYYMMDD-HHMMSS.md
+└── heartbeat.log     # General logs
 ```
+
+### Session Architecture
+
+The agent uses per-channel sessions with cross-session memory:
+
+| Context Type | System Prompt | History | Shared Memory |
+|--------------|---------------|---------|---------------|
+| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, TASKS.md |
+| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, TASKS.md |
+| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, TASKS.md |
+
+All contexts share `MEMORY.md` and `TASKS.md` for cross-session continuity.
 
 ### Interaction Model
 
 - **Agent is autonomous**: Manages tasks in TASKS.md, guided by HEARTBEAT.md
-- **Agent runs hourly** via cron (always runs, regardless of pending tasks)
+- **Agent runs on-demand** when messages arrive (also hourly via cron as fallback)
 - **Human communicates via chat** (Web UI or Telegram)
-- **Messages queued in INBOX.md** for agent to process on next run
-- **Agent responds via conversation log** which control center monitors
+- **Messages trigger immediate processing** (saved to channel conversation, agent starts automatically)
+- **Agent responds via API** which broadcasts to WebSocket and sends to Telegram if needed
 
 ### Container Architecture
 
@@ -125,7 +156,7 @@ The system uses two containers for faster builds:
 │  │                    │         │ hourly cron│ │                    │
 │  │          ┌─────────▼─────────┴────────────┘ │                    │
 │  │          │         File System              │                    │
-│  │          │  INBOX.md, TASKS.md, MEMORY.md   │                    │
+│  │          │  conversation/, TASKS.md, etc.   │                    │
 │  │          └──────────────────────────────────┘                    │
 │  └─────────────────────────────────────────────┘                    │
 └─────────────────────────────────────────────────────────────────────┘
@@ -157,8 +188,10 @@ Vector search enables semantic retrieval across all memory files using local emb
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/chat` | Send message to agent |
-| `GET` | `/api/chat/history` | Get conversation history |
+| `POST` | `/api/chat` | Send message to agent (specify channel) |
+| `POST` | `/api/chat/respond` | Agent sends response |
+| `GET` | `/api/chat/history?channel=web` | Get channel conversation history |
+| `GET` | `/api/chat/history/:date?channel=web` | Get conversation for specific date |
 | `GET` | `/api/files` | List workspace files |
 | `GET` | `/api/files/:path` | Read file content |
 | `PUT` | `/api/files/:path` | Update file content |
@@ -166,6 +199,10 @@ Vector search enables semantic retrieval across all memory files using local emb
 | `POST` | `/api/agent/run` | Trigger immediate run |
 | `GET` | `/api/outputs` | List agent outputs |
 | `GET` | `/api/runs` | Get run history |
+| `GET` | `/api/debug/conversations` | View all recent conversations |
+| `GET` | `/api/debug/conversations/:channel` | View channel conversations |
+| `GET` | `/api/debug/runs` | View recent agent runs |
+| `GET` | `/api/debug/runs/:id` | View specific run with full input/output |
 
 ### WebSocket Events
 
@@ -198,6 +235,25 @@ Or via docker exec:
 ```bash
 docker exec singularity-vector python memory-search.py index
 docker exec singularity-vector python memory-search.py search "your query"
+```
+
+### Debug Commands
+
+```bash
+# View recent web conversations
+curl http://localhost:3001/api/debug/conversations/web
+
+# View recent agent runs
+curl http://localhost:3001/api/debug/runs
+
+# View specific run with full input/output
+curl http://localhost:3001/api/debug/runs/20260201-123456
+
+# View just the input for a run
+curl http://localhost:3001/api/debug/runs/20260201-123456/input
+
+# View just the output for a run
+curl http://localhost:3001/api/debug/runs/20260201-123456/output
 ```
 
 ## Schedule

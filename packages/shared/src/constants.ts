@@ -5,7 +5,7 @@ export const PATHS = {
   HEARTBEAT_FILE: '/app/agent/HEARTBEAT.md',
   TASKS_FILE: '/app/agent/TASKS.md',
   MEMORY_FILE: '/app/agent/MEMORY.md',
-  INBOX_FILE: '/app/agent/INBOX.md',
+  // INBOX_FILE removed - messages now go directly to conversation channels
   MEMORY_DIR: '/app/agent/memory',
   CONVERSATION_DIR: '/app/agent/conversation',
 
@@ -43,6 +43,7 @@ export const WS_EVENTS = {
 export const API = {
   // Chat
   CHAT: '/api/chat',
+  CHAT_RESPOND: '/api/chat/respond',
   CHAT_HISTORY: '/api/chat/history',
 
   // Files
@@ -56,6 +57,10 @@ export const API = {
   STATUS: '/api/status',
   AGENT_RUN: '/api/agent/run',
   RUNS: '/api/runs',
+
+  // Debug
+  DEBUG_CONVERSATIONS: '/api/debug/conversations',
+  DEBUG_RUNS: '/api/debug/runs',
 } as const;
 
 // Server configuration defaults
@@ -71,7 +76,8 @@ export const WATCH_CONFIG = {
   WATCH_PATTERNS: [
     'agent/*.md',
     'agent/memory/*.md',
-    'agent/conversation/*.jsonl',
+    'agent/conversation/web/*.jsonl',
+    'agent/conversation/telegram/*.jsonl',
     'state/run-history.jsonl',
     'logs/agent-output/*.json',
   ],

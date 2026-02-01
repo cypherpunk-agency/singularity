@@ -1,9 +1,12 @@
 import { FastifyInstance } from 'fastify';
-import { SendMessageRequest, SendMessageResponse, Message } from '@singularity/shared';
-import { appendToInbox, getConversationHistory, getConversationDates, getRecentConversation } from '../conversation.js';
+import { SendMessageRequest, SendMessageResponse, RespondMessageRequest, Message, Channel } from '@singularity/shared';
+import { saveHumanMessage, saveAgentResponse, getRecentMessages, getConversationDates, getConversationHistory } from '../conversation.js';
+import { WSManager } from '../ws/events.js';
+import { triggerAgentRun } from '../utils/agent.js';
+import { sendToTelegram } from '../channels/telegram.js';
 
-export async function registerChatRoutes(fastify: FastifyInstance) {
-  // Send a message to the agent
+export async function registerChatRoutes(fastify: FastifyInstance, wsManager: WSManager) {
+  // Send a message to the agent (human -> agent)
   fastify.post<{
     Body: SendMessageRequest;
     Reply: SendMessageResponse;
@@ -16,7 +19,15 @@ export async function registerChatRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const message = await appendToInbox(text.trim(), channel);
+      // Save message to channel-specific conversation
+      const message = await saveHumanMessage(text.trim(), channel);
+
+      // Broadcast the message to all connected WebSocket clients
+      wsManager.broadcastChatMessage(message);
+
+      // Trigger agent to process the message with channel context
+      triggerAgentRun({ channel, type: 'chat' });
+
       return { success: true, messageId: message.id };
     } catch (error) {
       fastify.log.error(error, 'Failed to send message');
@@ -24,25 +35,62 @@ export async function registerChatRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Get conversation history (recent or all)
+  // Agent responds to a message (agent -> human)
+  fastify.post<{
+    Body: RespondMessageRequest;
+    Reply: SendMessageResponse;
+  }>('/api/chat/respond', async (request, reply) => {
+    const { text, channel = 'web' } = request.body;
+
+    if (!text || !text.trim()) {
+      reply.code(400).send({ success: false, messageId: '' });
+      return;
+    }
+
+    try {
+      // Save agent response to channel-specific conversation
+      const message = await saveAgentResponse(text.trim(), channel);
+
+      // Broadcast to WebSocket clients
+      wsManager.broadcastChatMessage(message);
+
+      // If telegram channel, also send to telegram
+      if (channel === 'telegram') {
+        await sendToTelegram(text.trim());
+      }
+
+      fastify.log.info({ channel, messageId: message.id }, 'Agent response saved and broadcast');
+
+      return { success: true, messageId: message.id };
+    } catch (error) {
+      fastify.log.error(error, 'Failed to save agent response');
+      reply.code(500).send({ success: false, messageId: '' });
+    }
+  });
+
+  // Get conversation history for a channel
   fastify.get<{
-    Querystring: { days?: string };
+    Querystring: { channel?: Channel; days?: string; limit?: string };
     Reply: { messages: Message[]; dates: string[] };
   }>('/api/chat/history', async (request) => {
-    const days = parseInt(request.query.days || '7');
-    const messages = await getRecentConversation(days);
-    const dates = await getConversationDates();
+    const channel = (request.query.channel || 'web') as Channel;
+    const limit = parseInt(request.query.limit || '50');
+
+    const messages = await getRecentMessages(channel, limit);
+    const dates = await getConversationDates(channel);
 
     return { messages, dates };
   });
 
-  // Get conversation for a specific date
+  // Get conversation for a specific date and channel
   fastify.get<{
     Params: { date: string };
+    Querystring: { channel?: Channel };
     Reply: { messages: Message[]; date: string };
   }>('/api/chat/history/:date', async (request) => {
     const { date } = request.params;
-    const messages = await getConversationHistory(date);
+    const channel = (request.query.channel || 'web') as Channel;
+    const messages = await getConversationHistory(channel, date);
 
     return { messages, date };
   });

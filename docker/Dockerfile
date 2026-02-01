@@ -1,49 +1,62 @@
 # Singularity Agent Container
-# Claude Code CLI-based autonomous agent with vector search
+# Claude Code CLI-based autonomous agent with control plane
+# Python/vector search is handled by a separate container for faster builds
 
 FROM node:20-slim
 
-# Install system dependencies
+# Install system dependencies (no Python - that's in the vector service)
 RUN apt-get update && apt-get install -y \
     cron \
     jq \
     git \
     curl \
-    python3 \
-    python3-pip \
-    python3-venv \
     sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code
+# Install pnpm
+RUN npm install -g pnpm@9
 
 # Create non-root agent user
 RUN useradd -m -s /bin/bash agent
 
 # Create app directory structure
 RUN mkdir -p /app/agent/memory \
+    /app/agent/conversation \
+    /app/config \
     /app/scripts \
     /app/logs/agent-output \
     /app/state \
+    /app/packages \
     && chown -R agent:agent /app
-
-# Set up Python virtual environment
-RUN python3 -m venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
-
-# Copy and install Python requirements
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy scripts
 COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
+# Copy config files (immutable by agent)
+COPY config/ /app/config/
+RUN chown -R root:root /app/config && chmod -R 444 /app/config/*
+
 # Copy crontab
 COPY docker/crontab /etc/cron.d/agent-cron
 RUN chmod 0644 /etc/cron.d/agent-cron \
     && crontab -u agent /etc/cron.d/agent-cron
+
+# Copy control plane packages
+COPY package.json pnpm-workspace.yaml tsconfig.base.json /app/
+COPY packages/ /app/packages/
+
+# Install and build control plane
+WORKDIR /app
+RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm build
+
+# Install Claude Code CLI (native installer - faster than npm)
+# Run as agent user so it installs to /home/agent/.claude/
+USER agent
+RUN curl -fsSL https://claude.ai/install.sh | bash
+USER root
+ENV PATH="/home/agent/.local/bin:$PATH"
 
 # Copy entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
@@ -55,6 +68,12 @@ WORKDIR /app
 # Environment defaults
 ENV AGENT_MODEL=sonnet
 ENV TZ=UTC
-ENV EMBEDDING_MODEL=all-MiniLM-L6-v2
+ENV CONTROL_PLANE_PORT=3001
+ENV APP_DIR=/app
+# Vector service URL (for control plane to call)
+ENV VECTOR_SERVICE_URL=http://vector:5000
+
+# Expose control plane ports
+EXPOSE 3000 3001
 
 ENTRYPOINT ["/entrypoint.sh"]

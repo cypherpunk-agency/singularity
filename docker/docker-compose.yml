@@ -11,10 +11,24 @@ services:
     environment:
       - AGENT_MODEL=${AGENT_MODEL:-sonnet}
       - TZ=${TZ:-UTC}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      # Control Plane
+      - CONTROL_PLANE_PORT=${CONTROL_PLANE_PORT:-3001}
+      - CONTROL_PLANE_TOKEN=${CONTROL_PLANE_TOKEN:-}
+      - APP_DIR=/app
+      # Vector service (for memory search)
+      - VECTOR_SERVICE_URL=http://vector:5000
+      # Telegram (optional)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+
+    ports:
+      # Control Plane API + WebSocket
+      - "${CONTROL_PLANE_PORT:-3001}:3001"
+      # Web UI (served by control plane in production)
+      - "3000:3000"
 
     volumes:
-      # Agent files (tasks, memory)
+      # Agent files (tasks, memory, conversation)
       - ../agent:/app/agent
 
       # Logs directory
@@ -23,15 +37,57 @@ services:
       # State persistence (session, vector DB, history)
       - ../state:/app/state
 
+      # Config files (SOUL.md, HEARTBEAT.md - agent identity)
+      - ../config:/app/config:ro
+
       # Claude CLI session data
       - claude-data:/home/agent/.claude
 
       # Scripts (for development - can remove in production)
       - ../scripts:/app/scripts:ro
 
+      # Note: packages are built into the container image
+      # Don't mount from host as pnpm symlinks don't work cross-platform
+
     # Keep container running
     tty: true
     stdin_open: true
+
+    depends_on:
+      vector:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  vector:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.vector
+    container_name: singularity-vector
+    restart: unless-stopped
+
+    environment:
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - APP_DIR=/app
+
+    volumes:
+      # State persistence (vector DB)
+      - ../state:/app/state
+
+      # Agent files (read-only - for indexing memory)
+      - ../agent:/app/agent:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   claude-data:

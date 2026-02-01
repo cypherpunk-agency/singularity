@@ -1,0 +1,47 @@
+# Singularity Vector Search Service
+# Provides vector similarity search for agent memory using sentence-transformers
+# This container is slow to build but rarely needs rebuilding
+
+FROM python:3.11-slim
+
+# Install minimal build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install PyTorch CPU-only first (smaller than default CUDA version)
+RUN pip install --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining dependencies
+RUN pip install --no-cache-dir \
+    sentence-transformers>=2.2.0 \
+    tiktoken>=0.5.0 \
+    fastapi>=0.100.0 \
+    uvicorn[standard]>=0.22.0
+
+# Copy the search script
+COPY scripts/memory-search.py /app/memory-search.py
+
+# Pre-download embedding model during build (avoids download at runtime)
+ENV EMBEDDING_MODEL=all-MiniLM-L6-v2
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Create directories for state
+RUN mkdir -p /app/state /app/agent
+
+# Environment
+ENV APP_DIR=/app
+ENV VECTOR_PORT=5000
+
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Run the HTTP server
+CMD ["python", "memory-search.py", "http", "--port", "5000"]

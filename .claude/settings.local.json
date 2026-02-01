@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''D:\\\\Code\\\\productivity\\\\singularity'' -Recurse -Force | Select-Object FullName\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''D:\\\\Code\\\\productivity'' | Select-Object Name, PSIsContainer\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''D:\\\\Code\\\\productivity\\\\singularity'' -Force | Select-Object Name\")",
+      "Bash(claude --version:*)",
+      "Bash(claude mcp:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker buildx:*)",
+      "Bash(tasklist:*)",
+      "Bash(docker system:*)",
+      "Bash(docker events:*)",
+      "Bash(docker images:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(echo:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
+      "Bash(pnpm build:*)",
+      "Bash(docker ps:*)",
+      "Bash(curl:*)",
+      "Bash(npm view:*)",
+      "Bash(npm info:*)",
+      "Bash(Get-Content \"C:\\\\Users\\\\tommi\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Code-productivity-singularity\\\\tasks\\\\b9d6534.output\" -Tail 50)",
+      "Bash(docker inspect:*)"
+    ]
+  }
+}

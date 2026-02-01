@@ -1,18 +1,21 @@
 # Environment
 .env
 
-# State files (contains session data)
-state/session-id.txt
-state/memory.db
-state/run-history.jsonl
+# State - ignore everything except structure
+state/*
+!state/.gitkeep
 
-# Logs
-logs/heartbeat.log
-logs/agent-output/*.json
+# Logs - ignore everything except structure
+logs/*
+!logs/.gitkeep
+logs/agent-output/*
+!logs/agent-output/.gitkeep
 
-# Memory logs (keep structure, ignore content)
-agent/memory/*.md
-agent/memory/archive/
+# Agent workspace (runtime state)
+agent/
+
+# Config (local settings)
+config/
 
 # Python
 __pycache__/
@@ -23,6 +26,12 @@ __pycache__/
 venv/
 ENV/
 
+# Node.js
+node_modules/
+dist/
+.pnpm-store/
+*.tsbuildinfo
+
 # IDE
 .idea/
 .vscode/
@@ -32,3 +41,4 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+nul

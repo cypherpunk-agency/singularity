@@ -1,5 +1,12 @@
 # Singularity Agent - Python Dependencies
 
+# PyTorch CPU-only (must be before sentence-transformers to avoid CUDA download)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
+# MCP server for exposing tools to Claude
+mcp>=1.0.0
+
 # Vector search with sentence transformers (local embeddings)
 sentence-transformers>=2.2.0
 

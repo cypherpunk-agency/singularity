@@ -1,114 +1,160 @@
 #!/bin/bash
 # Singularity Heartbeat Script
-# Main cron entry point - checks for tasks and runs agent if needed
+# Main cron entry point - runs agent on each heartbeat
 
 set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="/app"
-AGENT_DIR="${APP_DIR}/agent"
 STATE_DIR="${APP_DIR}/state"
 LOGS_DIR="${APP_DIR}/logs"
 
-HEARTBEAT_FILE="${AGENT_DIR}/HEARTBEAT.md"
 SESSION_FILE="${STATE_DIR}/session-id.txt"
 HISTORY_FILE="${STATE_DIR}/run-history.jsonl"
 
-# Timestamp for logging
-timestamp() {
-    date -Iseconds
-}
-
+# Logging
 log() {
-    echo "[$(timestamp)] $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Check if HEARTBEAT.md has actionable content
-has_tasks() {
-    if [ ! -f "$HEARTBEAT_FILE" ]; then
-        return 1
+log_header() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  $1"
+    echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+log_section() {
+    echo ""
+    echo "── $1 ──"
+}
+
+log_kv() {
+    printf "  %-16s %s\n" "$1:" "$2"
+}
+
+# Extract and display result summary from JSON output
+log_result_summary() {
+    local output_file="$1"
+    local exit_code="$2"
+
+    log_section "Result"
+
+    if [ "$exit_code" -ne 0 ]; then
+        log_kv "Status" "FAILED (exit code: $exit_code)"
+        if [ -f "$output_file" ]; then
+            echo ""
+            echo "  Error output:"
+            head -20 "$output_file" | sed 's/^/    /'
+        fi
+        return
     fi
 
-    # Check if file has content beyond comments and empty lines
-    # Also skip lines that only contain "_No tasks pending._" or similar
-    local content
-    content=$(grep -v '^#' "$HEARTBEAT_FILE" | grep -v '^$' | grep -v '^_.*_$' | grep -v '^\s*$' || true)
-
-    if [ -z "$content" ]; then
-        return 1
+    if [ ! -f "$output_file" ]; then
+        log_kv "Status" "FAILED (no output file)"
+        return
     fi
 
-    return 0
+    # Parse JSON output
+    local status duration cost result turns
+    status=$(jq -r '.subtype // "unknown"' "$output_file" 2>/dev/null || echo "unknown")
+    duration=$(jq -r '.duration_ms // 0' "$output_file" 2>/dev/null || echo "0")
+    cost=$(jq -r '.total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
+    turns=$(jq -r '.num_turns // 0' "$output_file" 2>/dev/null || echo "0")
+    result=$(jq -r '.result // "No result"' "$output_file" 2>/dev/null || echo "No result")
+
+    # Format duration
+    local duration_sec
+    duration_sec=$(echo "scale=1; $duration / 1000" | bc 2>/dev/null || echo "$((duration / 1000))")
+
+    # Format cost
+    local cost_formatted
+    cost_formatted=$(printf "%.4f" "$cost" 2>/dev/null || echo "$cost")
+
+    log_kv "Status" "$status"
+    log_kv "Duration" "${duration_sec}s"
+    log_kv "Turns" "$turns"
+    log_kv "Cost" "\$${cost_formatted}"
+
+    echo ""
+    echo "  Agent response:"
+    echo "$result" | fold -s -w 70 | sed 's/^/    /'
 }
 
 # Main heartbeat logic
 main() {
-    log "=== Heartbeat starting ==="
-
-    # Check for tasks
-    if ! has_tasks; then
-        log "No actionable tasks in HEARTBEAT.md - skipping run"
-        exit 0
-    fi
-
-    log "Tasks found in HEARTBEAT.md - running agent"
+    log_header "SINGULARITY HEARTBEAT"
 
     # Load session ID
     local session_id=""
     if [ -f "$SESSION_FILE" ]; then
         session_id=$(cat "$SESSION_FILE")
-        log "Using session ID: ${session_id:0:8}..."
     fi
+
+    log_section "Configuration"
+    log_kv "Session" "${session_id:0:8}..."
+    log_kv "Model" "${AGENT_MODEL:-sonnet}"
+    log_kv "Working Dir" "$APP_DIR"
 
     # Run the agent
     local start_time
     start_time=$(date +%s)
 
-    local output_file="${LOGS_DIR}/agent-output/$(date +%Y%m%d-%H%M%S).json"
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local output_file="${LOGS_DIR}/agent-output/${timestamp}.json"
+    local readable_file="${LOGS_DIR}/agent-output/${timestamp}.md"
     local exit_code=0
 
-    if "${SCRIPT_DIR}/run-agent.sh" > "$output_file" 2>&1; then
-        log "Agent run completed successfully"
+    log_section "Execution"
+    log "Starting agent..."
+    log "Live output: $readable_file"
+
+    # Pipe stream-json through processor for real-time markdown output
+    if "${SCRIPT_DIR}/run-agent.sh" 2>&1 | "${SCRIPT_DIR}/stream-to-md.sh" "$readable_file" "$output_file"; then
+        exit_code=0
     else
         exit_code=$?
-        log "Agent run failed with exit code: $exit_code"
     fi
 
     local end_time
     end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
-    # Check for HEARTBEAT_OK response (nothing needed attention)
-    local response_type="action"
-    if grep -q "HEARTBEAT_OK" "$output_file" 2>/dev/null; then
-        response_type="no_action"
-        log "Agent responded with HEARTBEAT_OK - no action needed"
-    fi
+    # Display result summary
+    log_result_summary "$output_file" "$exit_code"
 
-    # Log run to history
+    # Log run to history (compact JSON for machine parsing)
+    local cost
+    cost=$(jq -r '.total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
+
     local history_entry
     history_entry=$(jq -n \
-        --arg ts "$(timestamp)" \
+        --arg ts "$(date -Iseconds)" \
         --arg session "$session_id" \
-        --arg duration "$duration" \
-        --arg exit_code "$exit_code" \
-        --arg response_type "$response_type" \
+        --argjson duration "$duration" \
+        --argjson exit_code "$exit_code" \
+        --argjson cost "$cost" \
         --arg output_file "$output_file" \
         '{
             timestamp: $ts,
             session_id: $session,
-            duration_seconds: ($duration | tonumber),
-            exit_code: ($exit_code | tonumber),
-            response_type: $response_type,
+            duration_seconds: $duration,
+            exit_code: $exit_code,
+            cost_usd: $cost,
             output_file: $output_file
         }'
     )
 
     echo "$history_entry" >> "$HISTORY_FILE"
-    log "Run logged to history"
 
-    log "=== Heartbeat complete (${duration}s) ==="
+    log_section "Complete"
+    log_kv "Total time" "${duration}s"
+    log_kv "JSON output" "$output_file"
+    log_kv "Readable" "$readable_file"
+    echo ""
 }
 
 main "$@"

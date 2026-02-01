@@ -1,6 +1,6 @@
 #!/bin/bash
 # Singularity Agent Entrypoint
-# Initializes state and starts cron daemon
+# Initializes state, starts control plane and cron daemon
 
 set -e
 
@@ -8,9 +8,11 @@ echo "[$(date -Iseconds)] Singularity Agent starting..."
 
 # Ensure directories exist with proper permissions
 mkdir -p /app/agent/memory
+mkdir -p /app/agent/conversation
 mkdir -p /app/logs/agent-output
 mkdir -p /app/state
-chown -R agent:agent /app/agent /app/logs /app/state
+mkdir -p /home/agent/.claude
+chown -R agent:agent /app/agent /app/logs /app/state /home/agent/.claude
 
 # Initialize session ID if not exists
 if [ ! -f /app/state/session-id.txt ]; then
@@ -59,15 +61,28 @@ EOF
     echo "[$(date -Iseconds)] Created initial HEARTBEAT.md"
 fi
 
+# Initialize INBOX.md if not exists
+if [ ! -f /app/agent/INBOX.md ]; then
+    cat > /app/agent/INBOX.md << 'EOF'
+# Inbox
+
+Messages from humans will appear here. Process them and respond in the conversation log.
+
+---
+
+EOF
+    chown agent:agent /app/agent/INBOX.md
+    echo "[$(date -Iseconds)] Created initial INBOX.md"
+fi
+
 # Initialize run history if not exists
 if [ ! -f /app/state/run-history.jsonl ]; then
     touch /app/state/run-history.jsonl
     chown agent:agent /app/state/run-history.jsonl
 fi
 
-# Pre-download embedding model (runs as agent user)
-echo "[$(date -Iseconds)] Ensuring embedding model is downloaded..."
-su - agent -c "cd /app && /app/venv/bin/python3 -c \"from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL:-all-MiniLM-L6-v2}')\"" 2>/dev/null || true
+# Vector search is now handled by the separate vector service container
+# No need to pre-download embedding model here
 
 # Set up environment for cron jobs
 printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH|HOME)' > /etc/environment
@@ -76,6 +91,23 @@ printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH|HOME)' > /etc/environment
 echo "[$(date -Iseconds)] Starting cron daemon..."
 cron
 
+# Start control plane in background
+echo "[$(date -Iseconds)] Starting control plane..."
+cd /app
+node /app/packages/control-plane/dist/index.js &
+CONTROL_PLANE_PID=$!
+echo "[$(date -Iseconds)] Control plane started (PID: $CONTROL_PLANE_PID)"
+
+# Wait for control plane to be ready
+for i in {1..30}; do
+    if curl -s http://localhost:${CONTROL_PLANE_PORT:-3001}/health > /dev/null 2>&1; then
+        echo "[$(date -Iseconds)] Control plane is ready"
+        break
+    fi
+    sleep 1
+done
+
 # Keep container running and show logs
 echo "[$(date -Iseconds)] Singularity Agent ready. Tailing logs..."
+echo "[$(date -Iseconds)] Control Plane: http://localhost:${CONTROL_PLANE_PORT:-3001}"
 tail -f /app/logs/heartbeat.log 2>/dev/null || tail -f /dev/null

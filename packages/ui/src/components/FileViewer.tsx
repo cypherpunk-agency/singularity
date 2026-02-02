@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import { Copy, Check } from 'lucide-react';
 import { useStore } from '../store';
 import * as api from '../lib/api';
 import clsx from 'clsx';
@@ -9,6 +10,7 @@ export function FileViewer() {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Files that can be edited
   const editableFiles = ['MEMORY.md', 'INBOX.md', 'config/HEARTBEAT.md'];
@@ -22,6 +24,13 @@ export function FileViewer() {
   const handleCancel = () => {
     setIsEditing(false);
     setEditContent('');
+  };
+
+  const handleCopy = async () => {
+    if (!fileContent) return;
+    await navigator.clipboard.writeText(fileContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSave = async () => {
@@ -57,6 +66,16 @@ export function FileViewer() {
           <h3 className="font-medium text-white">{selectedFile}</h3>
         </div>
         <div className="flex items-center gap-2">
+          {!isEditing && (
+            <button
+              onClick={handleCopy}
+              disabled={!fileContent}
+              className="p-1.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50"
+              title="Copy to clipboard"
+            >
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+            </button>
+          )}
           {isEditing ? (
             <>
               <button

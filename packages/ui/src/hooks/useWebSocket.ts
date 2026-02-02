@@ -25,7 +25,7 @@ export function useWebSocket() {
           addMessage(payload.message);
         }
         // Only clear typing indicator for web channel agent responses
-        if (payload.message.sender === 'agent' && payload.message.channel === 'web') {
+        if (payload.message.from === 'agent' && payload.message.channel === 'web') {
           setAgentProcessing(false, null);
         }
         break;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import { useStore } from '../store';
 import { format } from 'date-fns';
@@ -8,7 +9,8 @@ import * as api from '../lib/api';
 
 export function Outputs() {
   const { sessions, sessionsLoading, fetchSessions } = useStore();
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const { sessionId } = useParams<{ sessionId?: string }>();
+  const navigate = useNavigate();
   const [sessionDetails, setSessionDetails] = useState<(AgentSession & { inputContent?: string; outputContent?: string }) | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
@@ -16,15 +18,15 @@ export function Outputs() {
     fetchSessions();
   }, [fetchSessions]);
 
-  // Load full session details when selected
+  // Load full session details when selected via URL param
   useEffect(() => {
-    if (!selectedSession) {
+    if (!sessionId) {
       setSessionDetails(null);
       return;
     }
 
     setDetailsLoading(true);
-    api.getSession(selectedSession)
+    api.getSession(sessionId)
       .then(details => {
         setSessionDetails(details);
         setDetailsLoading(false);
@@ -33,7 +35,15 @@ export function Outputs() {
         console.error('Failed to load session details:', err);
         setDetailsLoading(false);
       });
-  }, [selectedSession]);
+  }, [sessionId]);
+
+  const handleSelectSession = (id: string | null) => {
+    if (id) {
+      navigate(`/outputs/${id}`);
+    } else {
+      navigate('/outputs');
+    }
+  };
 
   return (
     <div className="flex h-full">
@@ -53,10 +63,10 @@ export function Outputs() {
             {sessions.map((session) => (
               <button
                 key={session.id}
-                onClick={() => setSelectedSession(session.id)}
+                onClick={() => handleSelectSession(session.id)}
                 className={clsx(
                   'w-full text-left p-3 rounded-lg mb-1 transition-colors',
-                  selectedSession === session.id
+                  sessionId === session.id
                     ? 'bg-primary-600 text-white'
                     : 'hover:bg-slate-700 text-slate-300'
                 )}
@@ -80,7 +90,7 @@ export function Outputs() {
                   {session.inputFile && (
                     <span className={clsx(
                       'px-1.5 py-0.5 rounded',
-                      selectedSession === session.id
+                      sessionId === session.id
                         ? 'bg-primary-500 text-white'
                         : 'bg-slate-600 text-slate-300'
                     )}>
@@ -90,7 +100,7 @@ export function Outputs() {
                   {session.outputFile && (
                     <span className={clsx(
                       'px-1.5 py-0.5 rounded',
-                      selectedSession === session.id
+                      sessionId === session.id
                         ? 'bg-primary-500 text-white'
                         : 'bg-slate-600 text-slate-300'
                     )}>
@@ -100,7 +110,7 @@ export function Outputs() {
                   {session.jsonFile && (
                     <span className={clsx(
                       'px-1.5 py-0.5 rounded',
-                      selectedSession === session.id
+                      sessionId === session.id
                         ? 'bg-primary-500 text-white'
                         : 'bg-slate-600 text-slate-300'
                     )}>
@@ -111,7 +121,7 @@ export function Outputs() {
                 {(session.metadata.total_cost_usd || session.metadata.duration_ms) && (
                   <div className={clsx(
                     'text-xs mt-1 flex gap-2',
-                    selectedSession === session.id ? 'text-primary-200' : 'text-slate-500'
+                    sessionId === session.id ? 'text-primary-200' : 'text-slate-500'
                   )}>
                     {session.metadata.total_cost_usd && (
                       <span>${session.metadata.total_cost_usd.toFixed(4)}</span>

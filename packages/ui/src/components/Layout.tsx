@@ -1,20 +1,32 @@
-import { useStore } from '../store';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Status } from './Status';
-import { Chat } from './Chat';
-import { Files } from './Files';
-import { Outputs } from './Outputs';
-import { History } from './History';
 import clsx from 'clsx';
 
 const navItems = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'files', label: 'Files', icon: '📁' },
-  { id: 'outputs', label: 'Outputs', icon: '📤' },
-  { id: 'history', label: 'History', icon: '📜' },
+  { path: '/chat', label: 'Chat', icon: '💬' },
+  { path: '/jobs', label: 'Jobs', icon: '💼' },
+  { path: '/files', label: 'Files', icon: '📁' },
+  { path: '/outputs', label: 'Outputs', icon: '📤' },
+  { path: '/history', label: 'History', icon: '📜' },
 ] as const;
 
 export function Layout() {
-  const { activeView, setActiveView } = useStore();
+  const location = useLocation();
+
+  // Update document title based on active view
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      '/chat': 'Chat - Singularity',
+      '/jobs': 'Jobs - Singularity',
+      '/files': 'Files - Singularity',
+      '/outputs': 'Outputs - Singularity',
+      '/history': 'History - Singularity',
+    };
+    // Find matching title (handle nested routes like /files/config/SOUL.md)
+    const basePath = '/' + location.pathname.split('/')[1];
+    document.title = titles[basePath] || 'Singularity';
+  }, [location.pathname]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-900">
@@ -34,29 +46,28 @@ export function Layout() {
         {/* Sidebar navigation */}
         <nav className="w-16 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-4 gap-2">
           {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={clsx(
-                'w-12 h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors',
-                activeView === item.id
-                  ? 'bg-primary-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-              )}
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                clsx(
+                  'w-12 h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors',
+                  isActive
+                    ? 'bg-primary-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                )
+              }
               title={item.label}
             >
               <span className="text-lg">{item.icon}</span>
               <span className="text-[10px]">{item.label}</span>
-            </button>
+            </NavLink>
           ))}
         </nav>
 
         {/* Content */}
         <main className="flex-1 overflow-hidden">
-          {activeView === 'chat' && <Chat />}
-          {activeView === 'files' && <Files />}
-          {activeView === 'outputs' && <Outputs />}
-          {activeView === 'history' && <History />}
+          <Outlet />
         </main>
       </div>
     </div>

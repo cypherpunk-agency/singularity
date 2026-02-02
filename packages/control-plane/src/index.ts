@@ -15,6 +15,7 @@ import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
 import { queueWorker } from './queue/worker.js';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -102,6 +103,15 @@ async function main() {
       decorateReply: false,
     });
     fastify.log.info(`Serving UI from ${uiDistPath}`);
+
+    // SPA fallback for client-side routing
+    const indexHtml = fs.readFileSync(path.join(uiDistPath, 'index.html'), 'utf-8');
+    fastify.setNotFoundHandler(async (request, reply) => {
+      if (!request.url.startsWith('/api') && !request.url.startsWith('/ws') && !request.url.startsWith('/health')) {
+        return reply.type('text/html').send(indexHtml);
+      }
+      return reply.code(404).send({ error: 'Not found' });
+    });
   } catch {
     fastify.log.info('UI dist not found, skipping static file serving');
   }

@@ -29,11 +29,7 @@ interface AppState {
   sessions: AgentSession[];
   sessionsLoading: boolean;
 
-  // View
-  activeView: 'chat' | 'files' | 'outputs' | 'history';
-
   // Actions
-  setActiveView: (view: 'chat' | 'files' | 'outputs' | 'history') => void;
   fetchStatus: () => Promise<void>;
   fetchHistory: () => Promise<void>;
   fetchFiles: () => Promise<void>;
@@ -65,11 +61,8 @@ export const useStore = create<AppState>((set, _get) => ({
   outputsLoading: false,
   sessions: [],
   sessionsLoading: false,
-  activeView: 'chat',
 
   // Actions
-  setActiveView: (view) => set({ activeView: view }),
-
   fetchStatus: async () => {
     set({ statusLoading: true });
     try {

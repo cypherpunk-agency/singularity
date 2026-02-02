@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { Layout } from './components/Layout';
-import { useStore } from './store';
-import { useWebSocket } from './hooks/useWebSocket';
+import { Outlet } from 'react-router-dom';
+import { useStore } from '../store';
+import { useWebSocket } from '../hooks/useWebSocket';
 
-function App() {
+export function AppProvider() {
   const { fetchStatus, fetchHistory, fetchFiles } = useStore();
 
   // Connect WebSocket
@@ -20,7 +20,5 @@ function App() {
     return () => clearInterval(interval);
   }, [fetchStatus, fetchHistory, fetchFiles]);
 
-  return <Layout />;
+  return <Outlet />;
 }
-
-export default App;

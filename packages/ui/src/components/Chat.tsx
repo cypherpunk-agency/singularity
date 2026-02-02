@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import Markdown from 'react-markdown';
 
 export function Chat() {
-  const { messages, messagesLoading, sendingMessage, sendMessage, agentProcessing, currentRunId, setActiveView } = useStore();
+  const { messages, messagesLoading, sendingMessage, sendMessage, agentProcessing, currentRunId } = useStore();
+  const navigate = useNavigate();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +77,7 @@ export function Chat() {
                     {message.channel === 'telegram' && <span>via Telegram</span>}
                     {message.from === 'agent' && message.metadata?.runId && (
                       <button
-                        onClick={() => setActiveView('history')}
+                        onClick={() => navigate('/history')}
                         className="hover:underline text-primary-400"
                         title="View session details"
                       >
@@ -97,7 +99,7 @@ export function Chat() {
                   </div>
                   {currentRunId && (
                     <button
-                      onClick={() => setActiveView('history')}
+                      onClick={() => navigate('/history')}
                       className="text-xs text-slate-400 hover:text-primary-400 hover:underline ml-2"
                     >
                       View progress

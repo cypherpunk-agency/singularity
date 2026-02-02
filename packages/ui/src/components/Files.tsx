@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { FileViewer } from './FileViewer';
 import { format } from 'date-fns';
@@ -6,11 +7,31 @@ import clsx from 'clsx';
 
 export function Files() {
   const { files, filesLoading, selectedFile, selectFile, fetchFiles } = useStore();
+  const params = useParams();
+  const navigate = useNavigate();
+
+  // Get file path from URL (splat route captures everything after /files/)
+  const urlFilePath = params['*'] || null;
 
   // Fetch files when component mounts (tab becomes active)
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
+
+  // Sync URL param to store
+  useEffect(() => {
+    if (urlFilePath !== selectedFile) {
+      selectFile(urlFilePath);
+    }
+  }, [urlFilePath, selectedFile, selectFile]);
+
+  const handleSelectFile = (path: string | null) => {
+    if (path) {
+      navigate(`/files/${path}`);
+    } else {
+      navigate('/files');
+    }
+  };
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -36,7 +57,7 @@ export function Files() {
             {files.map((file) => (
               <button
                 key={file.path}
-                onClick={() => selectFile(file.path)}
+                onClick={() => handleSelectFile(file.path)}
                 className={clsx(
                   'w-full text-left p-3 rounded-lg mb-1 transition-colors',
                   selectedFile === file.path

@@ -1,16 +1,22 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { WSEvent, WS_EVENTS, Message, AgentStatus } from '@singularity/shared';
+import { WSEvent, WS_EVENTS, Message, AgentStatus, AgentStartedPayload, Channel } from '@singularity/shared';
 import { useStore } from '../store';
+
+// Extended payload that may include additional fields
+interface ExtendedAgentStartedPayload extends AgentStartedPayload {
+  runId?: string;
+  channel?: Channel;
+}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const { addMessage, updateStatus, fetchStatus, fetchFiles } = useStore();
+  const { addMessage, updateStatus, fetchStatus, fetchFiles, setAgentProcessing } = useStore();
 
   // Use ref to always access the latest handleEvent, avoiding stale closure
   const handleEventRef = useRef<(event: WSEvent | { type: string; payload?: unknown }) => void>(() => {});
 
-  const handleEvent = useCallback((event: WSEvent | { type: string; payload?: unknown }) => {
+  const handleEvent = useCallback((event: WSEvent | { type: string; payload?: unknown; }) => {
     switch (event.type) {
       case WS_EVENTS.CHAT_RECEIVED: {
         const payload = event.payload as { message: Message };
@@ -18,14 +24,23 @@ export function useWebSocket() {
         break;
       }
 
-      case WS_EVENTS.AGENT_STARTED:
+      case WS_EVENTS.AGENT_STARTED: {
+        const startPayload = event.payload as ExtendedAgentStartedPayload;
         fetchStatus();
+        // If this is a chat run, show typing indicator
+        if (startPayload.channel === 'web') {
+          setAgentProcessing(true, startPayload.runId || null);
+        }
         break;
+      }
 
-      case WS_EVENTS.AGENT_COMPLETED:
+      case WS_EVENTS.AGENT_COMPLETED: {
         fetchStatus();
         fetchFiles();
+        // Clear typing indicator
+        setAgentProcessing(false, null);
         break;
+      }
 
       case WS_EVENTS.FILE_CHANGED:
       case WS_EVENTS.FILE_CREATED:
@@ -50,7 +65,7 @@ export function useWebSocket() {
       default:
         console.log('Unknown WebSocket event:', event.type);
     }
-  }, [addMessage, updateStatus, fetchStatus, fetchFiles]);
+  }, [addMessage, updateStatus, fetchStatus, fetchFiles, setAgentProcessing]);
 
   // Keep the ref updated with the latest handleEvent
   useEffect(() => {

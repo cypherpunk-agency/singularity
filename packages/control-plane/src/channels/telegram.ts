@@ -3,24 +3,13 @@ import { TELEGRAM_COMMANDS } from '@singularity/shared';
 import { WSManager } from '../ws/events.js';
 import { saveHumanMessage, getRecentConversation } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
+import { queueManager } from '../queue/manager.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
   return process.env.APP_DIR || '/app';
-}
-
-// Check if the lock file is actually locked using flock
-function isLockHeld(lockPath: string): boolean {
-  try {
-    // Try to acquire lock non-blocking - if it succeeds, no one else has it
-    execSync(`flock -n "${lockPath}" -c 'exit 0'`, { stdio: 'ignore' });
-    return false; // Lock was available, so not held
-  } catch {
-    return true; // Lock acquisition failed, someone else has it
-  }
 }
 
 let bot: Bot | null = null;
@@ -114,12 +103,8 @@ Or just send any text to chat with the agent.`);
     if (!isAuthorized(ctx)) return;
 
     try {
-      const triggered = triggerAgentRun({ type: 'cron' });
-      if (triggered) {
-        await ctx.reply('Agent run triggered!');
-      } else {
-        await ctx.reply('Agent is already running.');
-      }
+      const queueId = await triggerAgentRun({ type: 'cron' });
+      await ctx.reply(`Agent run queued (ID: ${queueId.slice(0, 8)}...)`);
     } catch (error) {
       await ctx.reply('Failed to trigger run: ' + error);
     }
@@ -142,14 +127,12 @@ Or just send any text to chat with the agent.`);
       const message = await saveHumanMessage(text, 'telegram');
       wsManager.broadcastChatMessage(message);
 
-      // Trigger agent with telegram channel context
-      const triggered = triggerAgentRun({ channel: 'telegram', type: 'chat' });
+      // React with thumbs up to acknowledge receipt
+      await ctx.react('👍');
 
-      if (triggered) {
-        await ctx.reply('Message received. Agent is processing...');
-      } else {
-        await ctx.reply('Message received. Agent is currently running and will process this when done.');
-      }
+      // Trigger agent with telegram channel context and vector search
+      // Agent response will be auto-extracted and sent when run completes
+      await triggerAgentRun({ channel: 'telegram', type: 'chat', query: text });
     } catch (error) {
       await ctx.reply('Failed to send message: ' + error);
     }
@@ -195,8 +178,10 @@ async function getAgentStatus() {
     // No history file
   }
 
-  const lockPath = path.join(basePath, 'state', 'agent.lock');
-  const status: 'idle' | 'running' | 'error' = isLockHeld(lockPath) ? 'running' : 'idle';
+  // Check queue for processing status
+  const processingRun = await queueManager.getProcessing();
+  const pendingRuns = await queueManager.getPending();
+  const status: 'idle' | 'running' | 'error' = processingRun ? 'running' : 'idle';
 
   const now = new Date();
   const nextHour = new Date(now);
@@ -211,6 +196,7 @@ async function getAgentStatus() {
     lastRunSuccess: lastRun ? lastRun.exit_code === 0 : null,
     sessionId,
     nextScheduledRun: nextHour.toISOString(),
+    pendingCount: pendingRuns.length,
   };
 }
 

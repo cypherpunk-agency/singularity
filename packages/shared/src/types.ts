@@ -4,6 +4,13 @@ export type Channel = 'web' | 'telegram';
 // Run type for agent context
 export type RunType = 'chat' | 'cron';
 
+// Message metadata for agent responses
+export interface MessageMetadata {
+  runId?: string;      // Link to session for detailed view
+  duration?: number;   // Run duration in ms
+  cost?: number;       // Cost in USD
+}
+
 // Message types for chat interface
 export interface Message {
   id: string;
@@ -12,6 +19,7 @@ export interface Message {
   channel: Channel;
   timestamp: string; // ISO 8601
   processedAt?: string; // ISO 8601 - when message was sent to agent for processing
+  metadata?: MessageMetadata; // Additional info for agent responses
 }
 
 export interface ConversationEntry {
@@ -114,6 +122,8 @@ export interface FileChangedPayload {
 
 export interface AgentStartedPayload {
   sessionId: string;
+  runId?: string;      // Run ID for linking to session
+  channel?: Channel;   // Channel if chat mode
   timestamp: string;
 }
 
@@ -177,4 +187,41 @@ export interface SearchResult {
 export interface SearchResponse {
   results: SearchResult[];
   query: string;
+}
+
+// Queue types for agent run serialization
+export type QueueRunStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface QueuedRun {
+  id: string;                  // UUID
+  type: RunType;               // 'chat' | 'cron'
+  channel?: Channel;           // 'web' | 'telegram'
+  query?: string;              // User's message for vector search
+  prompt?: string;             // Custom prompt
+  priority: number;            // 1=chat (higher), 2=cron
+  status: QueueRunStatus;
+  enqueuedAt: string;          // ISO 8601
+  startedAt?: string;          // ISO 8601
+  completedAt?: string;        // ISO 8601
+  runId?: string;              // Run ID once processing starts
+  error?: string;
+}
+
+export interface EnqueueRequest {
+  type: RunType;
+  channel?: Channel;
+  query?: string;
+  prompt?: string;
+}
+
+export interface EnqueueResponse {
+  success: boolean;
+  queueId: string;
+  position?: number;
+}
+
+export interface QueueStatusResponse {
+  pendingCount: number;
+  processingRun: QueuedRun | null;
+  recentCompleted: QueuedRun[];
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Message, AgentStatus, FileInfo, AgentOutput } from '@singularity/shared';
+import { Message, AgentStatus, FileInfo, AgentOutput, AgentSession } from '@singularity/shared';
 import * as api from './lib/api';
 
 interface AppState {
@@ -11,6 +11,8 @@ interface AppState {
   messages: Message[];
   messagesLoading: boolean;
   sendingMessage: boolean;
+  agentProcessing: boolean;  // True when agent is processing a chat message
+  currentRunId: string | null;  // Run ID of current processing job
 
   // Files
   files: FileInfo[];
@@ -22,6 +24,10 @@ interface AppState {
   // Outputs
   outputs: AgentOutput[];
   outputsLoading: boolean;
+
+  // Sessions
+  sessions: AgentSession[];
+  sessionsLoading: boolean;
 
   // View
   activeView: 'chat' | 'files' | 'outputs' | 'history';
@@ -37,6 +43,8 @@ interface AppState {
   addMessage: (message: Message) => void;
   updateStatus: (status: AgentStatus) => void;
   fetchOutputs: () => Promise<void>;
+  fetchSessions: () => Promise<void>;
+  setAgentProcessing: (processing: boolean, runId?: string | null) => void;
 }
 
 export const useStore = create<AppState>((set, _get) => ({
@@ -46,6 +54,8 @@ export const useStore = create<AppState>((set, _get) => ({
   messages: [],
   messagesLoading: false,
   sendingMessage: false,
+  agentProcessing: false,
+  currentRunId: null,
   files: [],
   filesLoading: false,
   selectedFile: null,
@@ -53,6 +63,8 @@ export const useStore = create<AppState>((set, _get) => ({
   fileContentLoading: false,
   outputs: [],
   outputsLoading: false,
+  sessions: [],
+  sessionsLoading: false,
   activeView: 'chat',
 
   // Actions
@@ -147,5 +159,20 @@ export const useStore = create<AppState>((set, _get) => ({
       console.error('Failed to fetch outputs:', error);
       set({ outputsLoading: false });
     }
+  },
+
+  fetchSessions: async () => {
+    set({ sessionsLoading: true });
+    try {
+      const { sessions } = await api.getSessions();
+      set({ sessions, sessionsLoading: false });
+    } catch (error) {
+      console.error('Failed to fetch sessions:', error);
+      set({ sessionsLoading: false });
+    }
+  },
+
+  setAgentProcessing: (processing, runId = null) => {
+    set({ agentProcessing: processing, currentRunId: runId });
   },
 }));

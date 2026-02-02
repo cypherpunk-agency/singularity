@@ -25,8 +25,8 @@ export async function registerChatRoutes(fastify: FastifyInstance, wsManager: WS
       // Broadcast the message to all connected WebSocket clients
       wsManager.broadcastChatMessage(message);
 
-      // Trigger agent to process the message with channel context
-      triggerAgentRun({ channel, type: 'chat' });
+      // Trigger agent to process the message with channel context and vector search
+      triggerAgentRun({ channel, type: 'chat', query: text.trim() });
 
       return { success: true, messageId: message.id };
     } catch (error) {

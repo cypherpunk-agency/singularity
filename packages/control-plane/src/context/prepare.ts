@@ -216,13 +216,12 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       metadata.components.conversationHistory = history.tokenEstimate;
       metadata.conversationMessagesIncluded = history.messageCount;
 
-      // Add response instructions
+      // Add channel info
       parts.push(`\n**Channel:** ${channel}`);
-      parts.push(`**Respond using:** curl -X POST http://localhost:3001/api/chat/respond -H 'Content-Type: application/json' -d '{"text": "YOUR_RESPONSE", "channel": "${channel}"}'`);
 
       // Highlight unprocessed messages requiring response
       if (focusMessageIds.length > 0) {
-        parts.push(`\n**New messages requiring response:** ${focusMessageIds.length}`);
+        parts.push(`**New messages requiring response:** ${focusMessageIds.length}`);
       }
     }
   }
@@ -279,7 +278,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   // Determine user prompt
   const userPrompt = type === 'cron'
     ? 'Begin heartbeat.'
-    : 'Process the incoming message and respond via the API.';
+    : 'Process the incoming message and respond.';
 
   return {
     systemPrompt: parts.join('\n\n'),

@@ -5,8 +5,8 @@ import { WSEvent, WS_EVENTS, Message } from '@singularity/shared';
 export interface WSManager {
   broadcast: (event: WSEvent) => void;
   broadcastFileChange: (path: string, content: string | undefined, changeType: 'modified' | 'created' | 'deleted') => void;
-  broadcastAgentStarted: (sessionId: string) => void;
-  broadcastAgentCompleted: (sessionId: string, duration: number, success: boolean) => void;
+  broadcastAgentStarted: (sessionId: string, runId?: string, channel?: string) => void;
+  broadcastAgentCompleted: (sessionId: string, duration: number, success: boolean, runId?: string) => void;
   broadcastChatMessage: (message: Message) => void;
   broadcastTyping: (active: boolean) => void;
 }
@@ -63,18 +63,18 @@ export function setupWebSocket(fastify: FastifyInstance): WSManager {
       });
     },
 
-    broadcastAgentStarted(sessionId: string) {
+    broadcastAgentStarted(sessionId: string, runId?: string, channel?: string) {
       this.broadcast({
         type: WS_EVENTS.AGENT_STARTED,
-        payload: { sessionId, timestamp: new Date().toISOString() },
+        payload: { sessionId, runId, channel, timestamp: new Date().toISOString() },
         timestamp: new Date().toISOString(),
       });
     },
 
-    broadcastAgentCompleted(sessionId: string, duration: number, success: boolean) {
+    broadcastAgentCompleted(sessionId: string, duration: number, success: boolean, runId?: string) {
       this.broadcast({
         type: WS_EVENTS.AGENT_COMPLETED,
-        payload: { sessionId, duration, success },
+        payload: { sessionId, duration, success, runId },
         timestamp: new Date().toISOString(),
       });
     },

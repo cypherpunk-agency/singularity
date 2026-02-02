@@ -1,4 +1,4 @@
-import { AgentStatus, Message, FileInfo, FileContent, AgentOutput } from '@singularity/shared';
+import { AgentStatus, Message, FileInfo, FileContent, AgentOutput, AgentSession } from '@singularity/shared';
 
 const API_BASE = '/api';
 
@@ -81,4 +81,14 @@ export async function triggerRun(): Promise<{ success: boolean; message: string 
 export async function getRuns(limit?: number): Promise<{ runs: unknown[] }> {
   const params = limit ? `?limit=${limit}` : '';
   return fetchJson(`${API_BASE}/runs${params}`);
+}
+
+// Sessions
+export async function getSessions(limit?: number): Promise<{ sessions: AgentSession[] }> {
+  const params = limit ? `?limit=${limit}` : '';
+  return fetchJson(`${API_BASE}/sessions${params}`);
+}
+
+export async function getSession(id: string): Promise<AgentSession & { inputContent?: string; outputContent?: string }> {
+  return fetchJson(`${API_BASE}/sessions/${id}`);
 }

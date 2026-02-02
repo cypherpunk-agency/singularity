@@ -4,14 +4,14 @@ import { format } from 'date-fns';
 import clsx from 'clsx';
 
 export function Chat() {
-  const { messages, messagesLoading, sendingMessage, sendMessage } = useStore();
+  const { messages, messagesLoading, sendingMessage, sendMessage, agentProcessing, currentRunId, setActiveView } = useStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or typing indicator appears
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, agentProcessing]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,35 +44,66 @@ export function Chat() {
             <p className="text-sm">Send a message to start chatting with the agent.</p>
           </div>
         ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={clsx(
-                'flex',
-                message.from === 'human' ? 'justify-end' : 'justify-start'
-              )}
-            >
+          <>
+            {messages.map((message) => (
               <div
+                key={message.id}
                 className={clsx(
-                  'max-w-[70%] rounded-lg px-4 py-2',
-                  message.from === 'human'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-slate-700 text-slate-100'
+                  'flex',
+                  message.from === 'human' ? 'justify-end' : 'justify-start'
                 )}
               >
-                <div className="whitespace-pre-wrap break-words">{message.text}</div>
                 <div
                   className={clsx(
-                    'text-xs mt-1 flex items-center gap-2',
-                    message.from === 'human' ? 'text-primary-200' : 'text-slate-400'
+                    'max-w-[70%] rounded-lg px-4 py-2',
+                    message.from === 'human'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-700 text-slate-100'
                   )}
                 >
-                  <span>{format(new Date(message.timestamp), 'HH:mm')}</span>
-                  {message.channel === 'telegram' && <span>via Telegram</span>}
+                  <div className="whitespace-pre-wrap break-words">{message.text}</div>
+                  <div
+                    className={clsx(
+                      'text-xs mt-1 flex items-center gap-2',
+                      message.from === 'human' ? 'text-primary-200' : 'text-slate-400'
+                    )}
+                  >
+                    <span>{format(new Date(message.timestamp), 'HH:mm')}</span>
+                    {message.channel === 'telegram' && <span>via Telegram</span>}
+                    {message.from === 'agent' && message.metadata?.runId && (
+                      <button
+                        onClick={() => setActiveView('history')}
+                        className="hover:underline text-primary-400"
+                        title="View session details"
+                      >
+                        Session
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+            {/* Typing indicator when agent is processing */}
+            {agentProcessing && (
+              <div className="flex justify-start">
+                <div className="bg-slate-700 text-slate-100 rounded-lg px-4 py-2 flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  {currentRunId && (
+                    <button
+                      onClick={() => setActiveView('history')}
+                      className="text-xs text-slate-400 hover:text-primary-400 hover:underline ml-2"
+                    >
+                      View progress
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>

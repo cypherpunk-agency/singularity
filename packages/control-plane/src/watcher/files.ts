@@ -170,12 +170,36 @@ async function processRunHistoryChange(
     const lastLine = newLines[newLines.length - 1];
     try {
       const entry = JSON.parse(lastLine);
+      const runId = entry.runId;
+
       wsManager.broadcastAgentCompleted(
         entry.session_id || entry.sessionId || 'unknown',
         entry.duration_seconds || entry.duration || 0,
-        entry.exit_code === 0
+        entry.exit_code === 0,
+        runId
       );
-      console.log(`Agent run completed: ${entry.runId || 'unknown'} (${entry.type}${entry.channel ? ':' + entry.channel : ''})`);
+      console.log(`Agent run completed: ${runId || 'unknown'} (${entry.type}${entry.channel ? ':' + entry.channel : ''})`);
+
+      // Extract and route response for successful chat runs
+      if (entry.type === 'chat' && entry.channel && entry.exit_code === 0) {
+        // Small delay to ensure output file is fully written
+        setTimeout(async () => {
+          try {
+            const { extractAndRouteResponse } = await import('../response/extractor.js');
+            await extractAndRouteResponse({
+              runId: entry.runId,
+              type: entry.type,
+              channel: entry.channel,
+              exit_code: entry.exit_code,
+              outputFile: entry.outputFile,
+              duration_seconds: entry.duration_seconds,
+              cost_usd: entry.cost_usd,
+            }, wsManager);
+          } catch (error) {
+            console.error('[watcher] Failed to extract and route response:', error);
+          }
+        }, 200);
+      }
 
       // Check for unprocessed messages and re-trigger if any exist
       // Small delay to ensure lock is released

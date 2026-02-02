@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { AgentStatus, RunHistoryEntry, TriggerRunRequest, TriggerRunResponse } from '@singularity/shared';
-import { getBasePath, isLockHeld, triggerAgentRun } from '../utils/agent.js';
+import { AgentStatus, RunHistoryEntry, TriggerRunRequest, TriggerRunResponse, Channel, RunType } from '@singularity/shared';
+import { getBasePath, triggerAgentRun } from '../utils/agent.js';
+import { prepareContext, PreparedContext } from '../context/index.js';
+import { queueManager } from '../queue/manager.js';
 
 export async function registerAgentRoutes(fastify: FastifyInstance) {
   // Get agent status
@@ -32,9 +34,9 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       // No history file
     }
 
-    // Check if agent is currently running by testing if lock file is held
-    const lockPath = path.join(basePath, 'state', 'agent.lock');
-    const status: 'idle' | 'running' | 'error' = isLockHeld(lockPath) ? 'running' : 'idle';
+    // Check if agent is currently running via queue
+    const processingRun = await queueManager.getProcessing();
+    const status: 'idle' | 'running' | 'error' = processingRun ? 'running' : 'idle';
 
     // Calculate next scheduled run (next hour)
     const now = new Date();
@@ -61,16 +63,60 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
   }>('/api/agent/run', async (request, reply) => {
     try {
       const { prompt, channel, type = 'cron' } = request.body;
-      const triggered = triggerAgentRun({ prompt, channel, type });
+      const queueId = await triggerAgentRun({ prompt, channel, type, query: prompt });
 
-      if (!triggered) {
-        return { success: false, message: 'Agent is already running' };
-      }
-
-      return { success: true, message: `Agent ${type} run triggered${channel ? ` for ${channel}` : ''}` };
+      return { success: true, message: `Agent ${type} run queued (ID: ${queueId.slice(0, 8)}...)${channel ? ` for ${channel}` : ''}` };
     } catch (error) {
       fastify.log.error(error, 'Failed to trigger agent run');
       reply.code(500).send({ success: false, message: 'Failed to trigger agent run' });
+    }
+  });
+
+  // Get prepared context for agent run
+  fastify.get<{
+    Querystring: {
+      type?: RunType;
+      channel?: Channel;
+      query?: string;
+      tokenBudget?: string;
+    };
+    Reply: PreparedContext;
+  }>('/api/agent/context', async (request) => {
+    const { type = 'chat', channel = 'web', query, tokenBudget } = request.query;
+
+    const context = await prepareContext({
+      type,
+      channel,
+      query,
+      tokenBudget: tokenBudget ? parseInt(tokenBudget) : undefined,
+    });
+
+    return context;
+  });
+
+  // Request service restart (rebuild control-plane + UI and restart)
+  fastify.post<{
+    Reply: { status: string; message: string };
+  }>('/api/agent/restart', async (_request, reply) => {
+    const basePath = getBasePath();
+    const stateDir = path.join(basePath, 'state');
+    const restartFile = path.join(stateDir, 'restart-requested');
+
+    try {
+      await fs.mkdir(stateDir, { recursive: true });
+      await fs.writeFile(restartFile, new Date().toISOString());
+      fastify.log.info('[Agent API] Restart requested, file written to: %s', restartFile);
+
+      return {
+        status: 'restart_scheduled',
+        message: 'Services will rebuild (control-plane + UI) and restart. This may take 30-60 seconds.',
+      };
+    } catch (error) {
+      fastify.log.error(error, 'Failed to write restart request file');
+      reply.code(500).send({
+        status: 'error',
+        message: 'Failed to schedule restart',
+      });
     }
   });
 

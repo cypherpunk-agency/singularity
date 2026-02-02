@@ -7,10 +7,13 @@ import { registerChatRoutes } from './api/chat.js';
 import { registerFilesRoutes } from './api/files.js';
 import { registerAgentRoutes } from './api/agent.js';
 import { registerOutputsRoutes } from './api/outputs.js';
+import { registerSessionsRoutes } from './api/sessions.js';
 import { registerDebugRoutes } from './api/debug.js';
+import { registerQueueRoutes } from './api/queue.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
+import { queueWorker } from './queue/worker.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -74,10 +77,16 @@ async function main() {
   await registerFilesRoutes(fastify);
   await registerAgentRoutes(fastify);
   await registerOutputsRoutes(fastify);
+  await registerSessionsRoutes(fastify);
   await registerDebugRoutes(fastify);
+  await registerQueueRoutes(fastify);
 
   // Start file watcher
   startFileWatcher(wsManager);
+
+  // Start queue worker and set WebSocket manager
+  queueWorker.setWSManager(wsManager);
+  queueWorker.start();
 
   // Start Telegram bot (if configured)
   if (process.env.TELEGRAM_BOT_TOKEN) {

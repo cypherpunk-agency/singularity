@@ -215,7 +215,7 @@ describe('message flow integration', () => {
         triggerAgentRun({ channel: 'telegram', type: 'chat' }),
       ]);
 
-      expect(triggers.filter(t => t === true)).toHaveLength(1);
+      expect(triggers.filter(t => t !== null)).toHaveLength(1);
       expect(mockedSpawn).toHaveBeenCalledTimes(1);
     });
   });
@@ -272,7 +272,7 @@ describe('message flow integration', () => {
       ]);
 
       // Only one trigger succeeds (whichever happens first)
-      expect([webTrigger, telegramTrigger].filter(t => t === true)).toHaveLength(1);
+      expect([webTrigger, telegramTrigger].filter(t => t !== null)).toHaveLength(1);
       expect(mockedSpawn).toHaveBeenCalledTimes(1);
     });
 

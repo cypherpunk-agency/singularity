@@ -6,6 +6,9 @@
 #   run-agent.sh --type cron                    # Cron mode: SOUL + HEARTBEAT
 #   run-agent.sh --type chat --channel web      # Chat mode: SOUL + CONVERSATION + history
 #   run-agent.sh --type chat --channel telegram # Chat mode for telegram
+#
+# Note: Serialization is handled by the queue system in the control plane.
+# This script is invoked by the queue worker, which ensures only one run at a time.
 
 set -e
 
@@ -26,24 +29,16 @@ HISTORY_FILE="${STATE_DIR}/run-history.jsonl"
 # Model configuration
 MODEL="${AGENT_MODEL:-sonnet}"
 
-# Lock file for preventing concurrent runs
-LOCK_FILE="${STATE_DIR}/agent.lock"
-
-# Acquire exclusive lock (non-blocking)
+# Ensure state directory exists
 mkdir -p "$STATE_DIR"
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another agent is already running. Exiting."
-    exit 1
-fi
-
-# Lock acquired - write PID to lock file for debugging
-echo $$ >&200
 
 # Parse arguments
 TYPE="chat"
 CHANNEL=""
 CUSTOM_PROMPT=""
+SYSTEM_PROMPT_FILE=""
+USER_PROMPT_OVERRIDE=""
+RUN_ID_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -57,6 +52,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --prompt)
             CUSTOM_PROMPT="$2"
+            shift 2
+            ;;
+        --system-prompt-file)
+            SYSTEM_PROMPT_FILE="$2"
+            shift 2
+            ;;
+        --user-prompt)
+            USER_PROMPT_OVERRIDE="$2"
+            shift 2
+            ;;
+        --run-id)
+            RUN_ID_OVERRIDE="$2"
             shift 2
             ;;
         *)
@@ -98,6 +105,13 @@ build_system_prompt() {
     # Always include SOUL.md
     if [ -f "$SOUL_FILE" ]; then
         prompt=$(cat "$SOUL_FILE")
+    fi
+
+    # Always include TOOLS.md (agent tools documentation)
+    if [ -f "${CONFIG_DIR}/TOOLS.md" ]; then
+        prompt="${prompt}
+
+$(cat "${CONFIG_DIR}/TOOLS.md")"
     fi
 
     if [[ "$TYPE" == "cron" ]]; then
@@ -151,8 +165,7 @@ No previous messages in this conversation."
 
             prompt="${prompt}
 
-**Channel:** ${CHANNEL}
-**Respond using:** curl -X POST http://localhost:3001/api/chat/respond -H 'Content-Type: application/json' -d '{\"text\": \"YOUR_RESPONSE\", \"channel\": \"${CHANNEL}\"}'"
+**Channel:** ${CHANNEL}"
         fi
     fi
 
@@ -241,9 +254,13 @@ main() {
         session_id=$(cat "$SESSION_FILE")
     fi
 
-    # Generate run ID
+    # Use provided run ID or generate one
     local run_id
-    run_id=$(date +%Y%m%d-%H%M%S)
+    if [[ -n "$RUN_ID_OVERRIDE" ]]; then
+        run_id="$RUN_ID_OVERRIDE"
+    else
+        run_id=$(date +%Y%m%d-%H%M%S)
+    fi
 
     log_header "SINGULARITY AGENT RUN (${TYPE}${CHANNEL:+:$CHANNEL})"
 
@@ -255,13 +272,20 @@ main() {
     log_kv "Model" "$MODEL"
     log_kv "Working Dir" "$APP_DIR"
 
-    # Build system prompt
+    # Build or use pre-prepared system prompt
     local system_prompt
-    system_prompt=$(build_system_prompt)
+    if [[ -n "$SYSTEM_PROMPT_FILE" && -f "$SYSTEM_PROMPT_FILE" ]]; then
+        log "Using pre-prepared system prompt from: $SYSTEM_PROMPT_FILE"
+        system_prompt=$(cat "$SYSTEM_PROMPT_FILE")
+    else
+        system_prompt=$(build_system_prompt)
+    fi
 
     # Determine user prompt
     local user_prompt
-    if [[ -n "$CUSTOM_PROMPT" ]]; then
+    if [[ -n "$USER_PROMPT_OVERRIDE" ]]; then
+        user_prompt="$USER_PROMPT_OVERRIDE"
+    elif [[ -n "$CUSTOM_PROMPT" ]]; then
         user_prompt="$CUSTOM_PROMPT"
     elif [[ "$TYPE" == "cron" ]]; then
         user_prompt="Begin heartbeat."

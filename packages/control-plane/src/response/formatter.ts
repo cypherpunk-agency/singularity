@@ -56,10 +56,8 @@ function formatForTelegram(text: string): string {
   formatted = formatted.replace(/\*(.+?)\*/g, '<i>$1</i>');
   formatted = formatted.replace(/_(.+?)_/g, '<i>$1</i>');
 
-  // Convert inline code `code` to <code>code</code>
-  formatted = formatted.replace(/`([^`]+?)`/g, '<code>$1</code>');
-
   // Convert code blocks ```code``` to <pre>code</pre>
+  // IMPORTANT: Must run BEFORE inline code to avoid backticks being partially matched
   formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
     // Extract content without the backticks and language identifier
     const lines = match.split('\n');
@@ -74,6 +72,9 @@ function formatForTelegram(text: string): string {
     content = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return `<pre>${content}</pre>`;
   });
+
+  // Convert inline code `code` to <code>code</code>
+  formatted = formatted.replace(/`([^`]+?)`/g, '<code>$1</code>');
 
   // Escape remaining HTML entities (but not our tags)
   // This is a simplified approach - in production, use a proper HTML escaping library

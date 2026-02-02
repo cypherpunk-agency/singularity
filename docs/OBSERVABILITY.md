@@ -2,6 +2,50 @@
 
 Tools and endpoints for debugging and monitoring agent runs.
 
+## Queue Monitoring
+
+Agent runs are processed sequentially through a queue. Monitor queue status:
+
+```bash
+# Check queue status (pending count, current run, recent completed)
+curl http://localhost:3001/api/queue/status | jq
+
+# List pending runs
+curl http://localhost:3001/api/queue | jq
+
+# Get specific queued run by ID
+curl http://localhost:3001/api/queue/QUEUE_ID | jq
+```
+
+### Queue Status Response
+
+```json
+{
+  "pendingCount": 2,
+  "processingRun": {
+    "id": "abc-123",
+    "type": "chat",
+    "channel": "web",
+    "priority": 1,
+    "status": "processing",
+    "enqueuedAt": "2026-02-01T23:50:51Z",
+    "startedAt": "2026-02-01T23:50:51Z",
+    "runId": "20260201-235051"
+  },
+  "recentCompleted": [...]
+}
+```
+
+### Queue File
+
+Runs persist in `state/queue.jsonl`:
+
+```json
+{"id":"abc-123","type":"chat","channel":"web","priority":1,"status":"completed","enqueuedAt":"...","startedAt":"...","completedAt":"...","runId":"20260201-235051"}
+```
+
+Priority: `1` = chat (higher), `2` = cron (lower). FIFO within same priority.
+
 ## Input Logging
 
 Every agent run saves the **full context sent to Claude** before execution:
@@ -147,8 +191,8 @@ docker exec singularity-agent bash -c "cat /app/logs/agent-input/RUN_ID-input.md
 # View web conversation
 docker exec singularity-agent bash -c "tail -10 /app/agent/conversation/web/$(date +%Y-%m-%d).jsonl"
 
-# Check if agent is running
-docker exec singularity-agent bash -c "flock -n /app/state/agent.lock -c 'echo Idle' || echo 'Running'"
+# Check if agent is running (via queue)
+curl -s http://localhost:3001/api/queue/status | jq -r 'if .processingRun then "Running: \(.processingRun.type)" else "Idle" end'
 ```
 
 ## Log Directory Structure
@@ -161,4 +205,9 @@ logs/
 │   ├── YYYYMMDD-HHMMSS.json  # Raw JSON output
 │   └── YYYYMMDD-HHMMSS.md    # Formatted markdown
 └── heartbeat.log             # General container logs
+
+state/
+├── queue.jsonl               # Run queue (pending, processing, completed)
+├── run-history.jsonl         # Completed run metadata
+└── session-id.txt            # Current Claude session ID
 ```

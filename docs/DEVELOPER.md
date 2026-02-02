@@ -16,6 +16,10 @@
 | `packages/control-plane/src/channels/telegram.ts` | Telegram bot integration |
 | `packages/control-plane/src/utils/agent.ts` | Agent triggering with channel/type support |
 | `packages/control-plane/src/api/sessions.ts` | Session listing and retrieval |
+| `packages/control-plane/src/api/queue.ts` | Queue visibility endpoints |
+| `packages/control-plane/src/queue/manager.ts` | Queue operations (enqueue, dequeue, complete) |
+| `packages/control-plane/src/queue/worker.ts` | Sequential run processor |
+| `packages/control-plane/src/queue/storage.ts` | JSONL queue persistence |
 | `packages/control-plane/src/context/` | Intelligent context preparation module |
 | `packages/control-plane/src/context/prepare.ts` | Main context assembly logic |
 | `packages/control-plane/src/context/memory-search.ts` | Vector search integration |
@@ -85,6 +89,10 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 | `GET /api/debug/runs/:id` | `api/debug.ts` | View run with full input/output |
 | `GET /api/debug/runs/:id/input` | `api/debug.ts` | Get just the input |
 | `GET /api/debug/runs/:id/output` | `api/debug.ts` | Get just the output |
+| `POST /api/queue/enqueue` | `api/queue.ts` | Add run to queue, returns queue ID |
+| `GET /api/queue` | `api/queue.ts` | List pending runs |
+| `GET /api/queue/status` | `api/queue.ts` | Queue status (pending count, processing run) |
+| `GET /api/queue/:id` | `api/queue.ts` | Get specific queued run |
 | `GET /health` | `index.ts` | Health check |
 
 ## WebSocket Events
@@ -102,34 +110,57 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 
 ## Data Flow
 
+### Queue-Based Run System
+
+All agent runs go through a queue to prevent concurrent execution:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Chat API   │────►│             │     │             │────►│  run-agent  │
+│  Telegram   │     │    Queue    │────►│   Worker    │     │    .sh      │
+│  Cron       │────►│  (JSONL)    │     │             │────►│  Claude CLI │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                    state/queue.jsonl    Sequential          Bash process
+                    Sorted by priority   processing
+```
+
+**Priority**: Chat runs (priority=1) process before cron runs (priority=2).
+
 ### Chat Message Flow
 
 1. Human sends message via UI/Telegram
 2. `POST /api/chat` saves to `agent/conversation/{channel}/YYYY-MM-DD.jsonl`
-3. Agent triggered with `--type chat --channel {channel}`
-4. `run-agent.sh` assembles context: SOUL.md + CONVERSATION.md + channel history + MEMORY.md + TASKS.md
-5. Claude CLI runs with `--dangerously-skip-permissions`
-6. Agent calls `curl -X POST /api/chat/respond` to send response
-7. Response saved to channel conversation, broadcast via WebSocket
-8. If telegram channel, also sent to Telegram
+3. Run enqueued with `type=chat`, `channel={channel}`, `priority=1`
+4. Queue worker picks up run (after any current run completes)
+5. Worker prepares context and spawns `run-agent.sh`
+6. Claude CLI runs with `--dangerously-skip-permissions`
+7. Agent calls `curl -X POST /api/chat/respond` to send response
+8. Response saved to channel conversation, broadcast via WebSocket
+9. If telegram channel, also sent to Telegram
+10. Worker marks run as completed, checks for next
 
 ### Cron (Heartbeat) Flow
 
-1. Cron triggers `run-agent.sh --type cron`
-2. `run-agent.sh` assembles context: SOUL.md + HEARTBEAT.md + MEMORY.md + TASKS.md
-3. Claude CLI runs with `--dangerously-skip-permissions`
-4. Agent manages tasks, updates MEMORY.md, etc.
+1. Cron calls `POST /api/queue/enqueue` with `type=cron`
+2. Run enqueued with `priority=2`
+3. Queue worker picks up run (chat runs take precedence)
+4. Worker prepares context and spawns `run-agent.sh`
+5. Claude CLI runs with `--dangerously-skip-permissions`
+6. Agent manages tasks, updates MEMORY.md, etc.
+7. Worker marks run as completed
 
 ## Key Patterns
 
 - **Per-channel conversations**: `conversation.ts` - separate directories for web/telegram
 - **Path security**: `api/files.ts` - normalize + startsWith check
 - **TASKS.md protected**: `api/files.ts` - write blocked
-- **Agent state via lock**: `api/agent.ts` - `state/agent.lock` existence
+- **Queue-based serialization**: `queue/worker.ts` - sequential run processing
+- **Priority ordering**: Chat (1) before cron (2), FIFO within same priority
 - **ID sanitization**: `api/outputs.ts` - path.basename + regex
 - **File cache dedup**: `watcher/files.ts` - skip unchanged content
 - **Viewable files whitelist**: `api/files.ts`
 - **Run history append-only**: `state/run-history.jsonl` - JSONL format
+- **Queue persistence**: `state/queue.jsonl` - JSONL with cleanup
 - **Input logging**: `logs/agent-input/` - full context sent to Claude for debugging
 
 ## Dev Commands

@@ -61,14 +61,19 @@ The Control Center provides a web-based interface to interact with and monitor t
 
 ## Manual Testing
 
-Run a heartbeat manually:
+Queue a heartbeat run:
 ```bash
-docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type cron
+curl -X POST http://localhost:3001/api/queue/enqueue -H 'Content-Type: application/json' -d '{"type":"cron"}'
 ```
 
-Run a chat mode test:
+Queue a chat run:
 ```bash
-docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type chat --channel web
+curl -X POST http://localhost:3001/api/queue/enqueue -H 'Content-Type: application/json' -d '{"type":"chat","channel":"web"}'
+```
+
+Check queue status:
+```bash
+curl http://localhost:3001/api/queue/status
 ```
 
 Check logs:
@@ -210,6 +215,10 @@ See [docs/CONTEXT.md](docs/CONTEXT.md) for details on intelligent context prepar
 | `GET` | `/api/debug/conversations/:channel` | View channel conversations |
 | `GET` | `/api/debug/runs` | View recent agent runs |
 | `GET` | `/api/debug/runs/:id` | View specific run with full input/output |
+| `POST` | `/api/queue/enqueue` | Add run to queue (returns queue ID) |
+| `GET` | `/api/queue` | List pending runs |
+| `GET` | `/api/queue/status` | Current queue status (pending count, processing run) |
+| `GET` | `/api/queue/:id` | Get specific run status |
 
 ### WebSocket Events
 
@@ -267,9 +276,10 @@ curl http://localhost:3001/api/debug/runs/20260201-123456/output
 
 ## Schedule
 
-- **Hourly** (minute 0): Run heartbeat, process tasks
-- **Daily at 3:00 AM**: Consolidate old memory logs
+- **Hourly** (minute 0): Enqueue heartbeat via queue API (processed sequentially)
 - **Daily at 3:30 AM**: Rebuild vector search index
+
+All runs go through the queue to prevent concurrent execution. Chat runs have higher priority than cron runs.
 
 ## Environment Variables
 

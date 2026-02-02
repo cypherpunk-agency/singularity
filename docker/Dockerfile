@@ -52,6 +52,9 @@ WORKDIR /app
 RUN pnpm install --frozen-lockfile || pnpm install
 RUN pnpm build
 
+# Fix ownership of installed packages (install runs as root before USER agent)
+RUN chown -R agent:agent /app/node_modules /app/packages
+
 # Install Claude Code CLI (native installer - faster than npm)
 # Run as agent user so it installs to /home/agent/.claude/
 USER agent

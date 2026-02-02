@@ -14,6 +14,21 @@ export interface EnqueueOptions {
  * Handles enqueueing, dequeueing, and tracking runs.
  */
 export class QueueManager {
+  private pendingRestart = false;
+
+  /**
+   * Set whether a restart is pending (waiting for current run to complete).
+   */
+  setPendingRestart(value: boolean): void {
+    this.pendingRestart = value;
+  }
+
+  /**
+   * Check if a restart is pending.
+   */
+  isPendingRestart(): boolean {
+    return this.pendingRestart;
+  }
   /**
    * Add a new run to the queue.
    * Returns the queued run with its ID.

@@ -107,6 +107,21 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     const restartFile = path.join(stateDir, 'restart-requested');
 
     try {
+      // Check if an agent run is currently processing
+      const processing = await queueManager.getProcessing();
+
+      if (processing) {
+        // Queue the restart to happen after current run completes
+        queueManager.setPendingRestart(true);
+        fastify.log.info('[Agent API] Restart queued, waiting for run %s to complete', processing.id);
+
+        return {
+          status: 'restart_queued',
+          message: 'Restart will occur after current agent run completes.',
+        };
+      }
+
+      // No run in progress - restart immediately
       await fs.mkdir(stateDir, { recursive: true });
       await fs.writeFile(restartFile, new Date().toISOString());
       fastify.log.info('[Agent API] Restart requested, file written to: %s', restartFile);
@@ -135,25 +150,38 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     try {
       const historyPath = path.join(basePath, 'state', 'run-history.jsonl');
       const content = await fs.readFile(historyPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(l => l.trim());
-      const runs = lines
-        .map(line => {
-          const raw = JSON.parse(line);
-          // Transform JSONL format to RunHistoryEntry interface
-          return {
-            timestamp: raw.timestamp,
-            sessionId: raw.sessionId,
-            duration: (raw.duration_seconds || raw.duration || 0) * 1000, // Convert seconds to ms
-            success: raw.exit_code === 0 || raw.success === true,
-            tokensUsed: raw.tokensUsed,
-            cost: raw.cost_usd || raw.cost,
-            output: raw.readableFile || raw.output,
-          } as RunHistoryEntry;
-        })
-        .reverse()
-        .slice(0, limit);
 
-      return { runs };
+      // Parse multi-line JSON entries (split on }\n{ pattern and handle first/last entries)
+      const runs: RunHistoryEntry[] = [];
+      let currentEntry = '';
+      let braceDepth = 0;
+
+      for (const char of content) {
+        currentEntry += char;
+        if (char === '{') braceDepth++;
+        if (char === '}') braceDepth--;
+
+        // When we close a complete JSON object, parse it
+        if (braceDepth === 0 && currentEntry.trim()) {
+          try {
+            const raw = JSON.parse(currentEntry.trim());
+            runs.push({
+              timestamp: raw.timestamp,
+              sessionId: raw.session_id || raw.sessionId,
+              duration: (raw.duration_seconds || raw.duration || 0) * 1000, // Convert seconds to ms
+              success: raw.exit_code === 0 || raw.success === true,
+              tokensUsed: raw.tokensUsed || raw.tokens_used,
+              cost: raw.cost_usd || raw.cost,
+              output: raw.readableFile || raw.readable_file || raw.output,
+            } as RunHistoryEntry);
+          } catch (parseError) {
+            // Skip invalid entries
+          }
+          currentEntry = '';
+        }
+      }
+
+      return { runs: runs.reverse().slice(0, limit) };
     } catch {
       return { runs: [] };
     }

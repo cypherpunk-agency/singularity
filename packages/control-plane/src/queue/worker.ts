@@ -30,6 +30,18 @@ function getBasePath(): string {
 }
 
 /**
+ * Write the restart request file to trigger a service restart.
+ */
+async function writeRestartFile(): Promise<void> {
+  const basePath = getBasePath();
+  const stateDir = path.join(basePath, 'state');
+  const restartFile = path.join(stateDir, 'restart-requested');
+  await fs.mkdir(stateDir, { recursive: true });
+  await fs.writeFile(restartFile, new Date().toISOString());
+  console.log('[QueueWorker] Restart file written to:', restartFile);
+}
+
+/**
  * Queue worker that processes runs sequentially.
  */
 export class QueueWorker {
@@ -248,6 +260,13 @@ export class QueueWorker {
       } catch (error) {
         console.error(`[QueueWorker] Failed to extract response:`, error);
       }
+    }
+
+    // Execute pending restart if requested during this run
+    if (queueManager.isPendingRestart()) {
+      console.log('[QueueWorker] Executing pending restart');
+      queueManager.setPendingRestart(false);
+      await writeRestartFile();
     }
   }
 }

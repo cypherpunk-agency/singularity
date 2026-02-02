@@ -104,7 +104,11 @@ Or just send any text to chat with the agent.`);
 
     try {
       const queueId = await triggerAgentRun({ type: 'cron' });
-      await ctx.reply(`Agent run queued (ID: ${queueId.slice(0, 8)}...)`);
+      if (queueId) {
+        await ctx.reply(`Agent run queued (ID: ${queueId.slice(0, 8)}...)`);
+      } else {
+        await ctx.reply('Agent run already pending');
+      }
     } catch (error) {
       await ctx.reply('Failed to trigger run: ' + error);
     }

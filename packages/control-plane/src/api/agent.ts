@@ -65,7 +65,11 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       const { prompt, channel, type = 'cron' } = request.body;
       const queueId = await triggerAgentRun({ prompt, channel, type, query: prompt });
 
-      return { success: true, message: `Agent ${type} run queued (ID: ${queueId.slice(0, 8)}...)${channel ? ` for ${channel}` : ''}` };
+      if (queueId) {
+        return { success: true, message: `Agent ${type} run queued (ID: ${queueId.slice(0, 8)}...)${channel ? ` for ${channel}` : ''}` };
+      } else {
+        return { success: true, message: `Agent ${type} run already pending${channel ? ` for ${channel}` : ''}` };
+      }
     } catch (error) {
       fastify.log.error(error, 'Failed to trigger agent run');
       reply.code(500).send({ success: false, message: 'Failed to trigger agent run' });
@@ -133,7 +137,19 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       const content = await fs.readFile(historyPath, 'utf-8');
       const lines = content.trim().split('\n').filter(l => l.trim());
       const runs = lines
-        .map(line => JSON.parse(line) as RunHistoryEntry)
+        .map(line => {
+          const raw = JSON.parse(line);
+          // Transform JSONL format to RunHistoryEntry interface
+          return {
+            timestamp: raw.timestamp,
+            sessionId: raw.sessionId,
+            duration: (raw.duration_seconds || raw.duration || 0) * 1000, // Convert seconds to ms
+            success: raw.exit_code === 0 || raw.success === true,
+            tokensUsed: raw.tokensUsed,
+            cost: raw.cost_usd || raw.cost,
+            output: raw.readableFile || raw.output,
+          } as RunHistoryEntry;
+        })
         .reverse()
         .slice(0, limit);
 

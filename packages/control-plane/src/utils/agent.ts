@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { Channel, RunType } from '@singularity/shared';
+import { Channel, RunType, QueuedRun } from '@singularity/shared';
 import { hasUnprocessedMessages } from '../conversation.js';
 import { queueManager } from '../queue/manager.js';
 import { queueWorker } from '../queue/worker.js';
@@ -51,9 +51,32 @@ export interface TriggerOptions {
  * Trigger the agent to run with the given options.
  * Enqueues the run and returns the queue ID.
  * The queue worker will process it sequentially.
+ *
+ * For chat runs, deduplicates by channel - if there's already a pending or
+ * processing chat run for the same channel, returns null instead of enqueueing.
+ * This prevents message storms (e.g., multiple Telegram messages arriving at once)
+ * from creating duplicate runs.
  */
-export async function triggerAgentRun(options: TriggerOptions = {}): Promise<string> {
+export async function triggerAgentRun(options: TriggerOptions = {}): Promise<string | null> {
   const { channel, type = 'chat', prompt, query } = options;
+
+  // For chat runs, check if there's already a pending/processing run for this channel
+  if (type === 'chat') {
+    const pending = await queueManager.getPending();
+    const processing = await queueManager.getProcessing();
+    const allActive = [...pending, processing].filter(Boolean) as QueuedRun[];
+
+    // Find existing run for same channel (or any chat run if no channel specified)
+    const existing = allActive.find(run =>
+      run.type === 'chat' &&
+      (channel ? run.channel === channel : true)
+    );
+
+    if (existing) {
+      console.log(`[triggerAgentRun] Skipping duplicate: existing ${existing.status} run ${existing.id} for channel=${channel || 'any'}`);
+      return null;
+    }
+  }
 
   // Enqueue the run
   const queuedRun = await queueManager.enqueue({

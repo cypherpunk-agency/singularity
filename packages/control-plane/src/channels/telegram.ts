@@ -4,6 +4,7 @@ import { WSManager } from '../ws/events.js';
 import { saveHumanMessage, getRecentConversation } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
 import { queueManager } from '../queue/manager.js';
+import { transcribe } from '../services/transcription.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -139,6 +140,44 @@ Or just send any text to chat with the agent.`);
       await triggerAgentRun({ channel: 'telegram', type: 'chat', query: text });
     } catch (error) {
       await ctx.reply('Failed to send message: ' + error);
+    }
+  });
+
+  // Handle voice messages
+  bot.on('message:voice', async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.reply('Unauthorized. Your chat ID: ' + ctx.chat.id);
+      return;
+    }
+
+    try {
+      // Acknowledge receipt (🎧 is closest available to microphone)
+      await ctx.react('🎉');
+
+      // Download voice file from Telegram
+      const file = await ctx.getFile();
+      if (!file.file_path) {
+        await ctx.reply('Could not get voice file');
+        return;
+      }
+
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+      // Transcribe via GPU-accelerated service
+      const transcription = await transcribe(audioBuffer);
+
+      // Reply with transcription first
+      await ctx.reply(`Transcription: ${transcription}`);
+
+      // Then process as regular chat message
+      const message = await saveHumanMessage(transcription, 'telegram');
+      wsManager.broadcastChatMessage(message);
+      await triggerAgentRun({ channel: 'telegram', type: 'chat', query: transcription });
+    } catch (error) {
+      console.error('Voice message error:', error);
+      await ctx.reply('Failed to process voice message: ' + (error instanceof Error ? error.message : String(error)));
     }
   });
 

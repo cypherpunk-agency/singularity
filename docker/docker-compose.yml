@@ -20,6 +20,8 @@ services:
       - APP_DIR=/app
       # Vector service (for memory search)
       - VECTOR_SERVICE_URL=http://vector:5000
+      # Transcription service (for voice messages)
+      - TRANSCRIPTION_SERVICE_URL=http://transcription:5001
       # Telegram (optional) - loaded from env_file
 
     ports:
@@ -90,6 +92,32 @@ services:
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  transcription:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.transcription
+    container_name: singularity-transcription
+    restart: unless-stopped
+
+    environment:
+      - WHISPER_MODEL=large-v3-turbo
+      - WHISPER_DEVICE=cuda
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
       interval: 30s
       timeout: 10s
       retries: 3

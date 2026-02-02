@@ -37,8 +37,8 @@ services:
       # State persistence (session, vector DB, history)
       - ../state:/app/state
 
-      # Config files (SOUL.md, HEARTBEAT.md - agent identity)
-      - ../config:/app/config:ro
+      # Config files (SOUL.md, CONVERSATION.md, HEARTBEAT.md - now under agent/)
+      - ../agent/config:/app/agent/config
 
       # Claude CLI session data
       - claude-data:/home/agent/.claude

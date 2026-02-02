@@ -91,6 +91,11 @@ cat logs/heartbeat.log
 agent/
 ├── TASKS.md          # Pending/completed tasks (agent-managed)
 ├── MEMORY.md         # Long-term curated memory (cross-session)
+├── config/           # Agent configuration (mutable)
+│   ├── SOUL.md       # Core identity (all contexts)
+│   ├── CONVERSATION.md # Chat-specific instructions
+│   ├── HEARTBEAT.md  # Cron-specific instructions + heartbeat tasks
+│   └── TOOLS.md      # Agent tools documentation
 ├── memory/           # Daily activity logs
 │   └── YYYY-MM-DD.md
 └── conversation/     # Per-channel chat history
@@ -98,11 +103,6 @@ agent/
     │   └── YYYY-MM-DD.jsonl
     └── telegram/
         └── YYYY-MM-DD.jsonl
-
-config/
-├── SOUL.md           # Core identity (all contexts)
-├── CONVERSATION.md   # Chat-specific instructions
-└── HEARTBEAT.md      # Cron-specific instructions
 
 logs/
 ├── agent-input/      # Full context sent to Claude (for debugging)

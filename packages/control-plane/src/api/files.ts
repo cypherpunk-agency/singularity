@@ -19,10 +19,10 @@ function getVectorServiceUrl(): string {
 
 // Files that can be viewed/edited through the control plane
 const VIEWABLE_FILES = [
-  'HEARTBEAT.md',
   'TASKS.md',
   'MEMORY.md',
   'INBOX.md',
+  'config/HEARTBEAT.md',
 ];
 
 export async function registerFilesRoutes(fastify: FastifyInstance) {

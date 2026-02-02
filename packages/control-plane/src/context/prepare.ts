@@ -166,7 +166,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   };
 
   // 1. SOUL.md (always included)
-  const soul = await readFileSafe(path.join(basePath, 'config', 'SOUL.md'));
+  const soul = await readFileSafe(path.join(basePath, 'agent', 'config', 'SOUL.md'));
   if (soul) {
     parts.push(soul);
     const soulTokens = estimateTokens(soul);
@@ -175,7 +175,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   }
 
   // 1b. TOOLS.md (always included after SOUL)
-  const tools = await readFileSafe(path.join(basePath, 'config', 'TOOLS.md'));
+  const tools = await readFileSafe(path.join(basePath, 'agent', 'config', 'TOOLS.md'));
   if (tools) {
     parts.push(tools);
     const toolsTokens = estimateTokens(tools);
@@ -186,7 +186,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
 
   // 2. Mode-specific instructions
   if (type === 'cron') {
-    const heartbeat = await readFileSafe(path.join(basePath, 'config', 'HEARTBEAT.md'));
+    const heartbeat = await readFileSafe(path.join(basePath, 'agent', 'config', 'HEARTBEAT.md'));
     if (heartbeat) {
       parts.push(heartbeat);
       const tokens = estimateTokens(heartbeat);
@@ -194,7 +194,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       metadata.components.modeInstructions = tokens;
     }
   } else {
-    const conversation = await readFileSafe(path.join(basePath, 'config', 'CONVERSATION.md'));
+    const conversation = await readFileSafe(path.join(basePath, 'agent', 'config', 'CONVERSATION.md'));
     if (conversation) {
       parts.push(conversation);
       const tokens = estimateTokens(conversation);

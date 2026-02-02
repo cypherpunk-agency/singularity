@@ -149,6 +149,6 @@ docker-compose -f docker/docker-compose.yml up -d agent
 - `/app/logs/agent-input/` - Full context sent to Claude (for debugging)
 - `/app/agent/conversation/web/` - Web chat messages
 - `/app/agent/conversation/telegram/` - Telegram chat messages
-- `/app/config/CONVERSATION.md` - Chat mode system prompt
-- `/app/config/HEARTBEAT.md` - Cron mode system prompt
-- `/app/config/SOUL.md` - Core identity (used in all modes)
+- `/app/agent/config/CONVERSATION.md` - Chat mode system prompt
+- `/app/agent/config/HEARTBEAT.md` - Cron mode system prompt + heartbeat tasks
+- `/app/agent/config/SOUL.md` - Core identity (used in all modes)

@@ -30,9 +30,9 @@
 | `packages/shared/src/constants.ts` | Paths, WS events, API routes |
 | `packages/shared/src/types.ts` | Shared types (Channel, RunType, Message, etc.) |
 | `scripts/run-agent.sh` | Claude CLI invocation, context assembly |
-| `config/SOUL.md` | Core identity (all contexts) |
-| `config/CONVERSATION.md` | Chat-specific system prompt |
-| `config/HEARTBEAT.md` | Cron-specific system prompt |
+| `agent/config/SOUL.md` | Core identity (all contexts) |
+| `agent/config/CONVERSATION.md` | Chat-specific system prompt |
+| `agent/config/HEARTBEAT.md` | Cron-specific system prompt + heartbeat tasks |
 
 ## Session Architecture
 
@@ -41,7 +41,7 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Shared Cross-Session Context                 │
-│         config/SOUL.md, agent/MEMORY.md, agent/TASKS.md         │
+│    agent/config/SOUL.md, agent/MEMORY.md, agent/TASKS.md        │
 └─────────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐

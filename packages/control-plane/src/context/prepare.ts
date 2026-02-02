@@ -174,7 +174,16 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul = soulTokens;
   }
 
-  // 1b. TOOLS.md (always included after SOUL)
+  // 1b. SYSTEM.md (always included after SOUL, before TOOLS)
+  const system = await readFileSafe(path.join(basePath, 'agent', 'config', 'SYSTEM.md'));
+  if (system) {
+    parts.push(system);
+    const systemTokens = estimateTokens(system);
+    usedTokens += systemTokens;
+    metadata.components.soul += systemTokens; // Count with soul
+  }
+
+  // 1c. TOOLS.md (always included after SYSTEM)
   const tools = await readFileSafe(path.join(basePath, 'agent', 'config', 'TOOLS.md'));
   if (tools) {
     parts.push(tools);

@@ -107,6 +107,13 @@ build_system_prompt() {
         prompt=$(cat "$SOUL_FILE")
     fi
 
+    # Always include SYSTEM.md (system overview) - before TOOLS
+    if [ -f "${CONFIG_DIR}/SYSTEM.md" ]; then
+        prompt="${prompt}
+
+$(cat "${CONFIG_DIR}/SYSTEM.md")"
+    fi
+
     # Always include TOOLS.md (agent tools documentation)
     if [ -f "${CONFIG_DIR}/TOOLS.md" ]; then
         prompt="${prompt}

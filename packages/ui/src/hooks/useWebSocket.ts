@@ -20,7 +20,14 @@ export function useWebSocket() {
     switch (event.type) {
       case WS_EVENTS.CHAT_RECEIVED: {
         const payload = event.payload as { message: Message };
-        addMessage(payload.message);
+        // Only add messages from web channel to the web UI
+        if (payload.message.channel === 'web') {
+          addMessage(payload.message);
+        }
+        // Only clear typing indicator for web channel agent responses
+        if (payload.message.sender === 'agent' && payload.message.channel === 'web') {
+          setAgentProcessing(false, null);
+        }
         break;
       }
 

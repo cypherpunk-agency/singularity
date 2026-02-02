@@ -8,6 +8,9 @@ services:
     container_name: singularity-agent
     restart: unless-stopped
 
+    env_file:
+      - ../.env
+
     environment:
       - AGENT_MODEL=${AGENT_MODEL:-sonnet}
       - TZ=${TZ:-UTC}
@@ -17,9 +20,7 @@ services:
       - APP_DIR=/app
       # Vector service (for memory search)
       - VECTOR_SERVICE_URL=http://vector:5000
-      # Telegram (optional)
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # Telegram (optional) - loaded from env_file
 
     ports:
       # Control Plane API + WebSocket

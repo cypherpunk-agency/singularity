@@ -40,25 +40,44 @@ function formatForWeb(text: string, _options: FormatOptions): string {
 /**
  * Format response for Telegram
  * - Truncates to fit Telegram's 4096 char limit
- * - Converts some markdown to Telegram-compatible format
+ * - Converts markdown to HTML for Telegram parse_mode: 'HTML'
  */
 function formatForTelegram(text: string): string {
   let formatted = text;
 
-  // Convert some markdown to simpler format
-  // Remove triple backticks (code blocks) - keep content but simplify
+  // Convert markdown to HTML for Telegram
+  // Note: Telegram supports HTML parse mode with tags: <b>, <i>, <code>, <pre>, etc.
+
+  // Convert bold **text** or __text__ to <b>text</b>
+  formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  formatted = formatted.replace(/__(.+?)__/g, '<b>$1</b>');
+
+  // Convert italic *text* or _text_ to <i>text</i>
+  formatted = formatted.replace(/\*(.+?)\*/g, '<i>$1</i>');
+  formatted = formatted.replace(/_(.+?)_/g, '<i>$1</i>');
+
+  // Convert inline code `code` to <code>code</code>
+  formatted = formatted.replace(/`([^`]+?)`/g, '<code>$1</code>');
+
+  // Convert code blocks ```code``` to <pre>code</pre>
   formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
     // Extract content without the backticks and language identifier
     const lines = match.split('\n');
+    let content = match;
     if (lines.length > 2) {
-      // Remove first and last line (```)
-      return lines.slice(1, -1).join('\n');
+      // Remove first line (``` or ```language) and last line (```)
+      content = lines.slice(1, -1).join('\n');
+    } else {
+      content = match.replace(/```/g, '');
     }
-    return match.replace(/```/g, '');
+    // Escape HTML entities in code blocks
+    content = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<pre>${content}</pre>`;
   });
 
-  // Convert inline code to regular text (Telegram has limited code support)
-  formatted = formatted.replace(/`([^`]+)`/g, '$1');
+  // Escape remaining HTML entities (but not our tags)
+  // This is a simplified approach - in production, use a proper HTML escaping library
+  formatted = formatted.replace(/&(?!(amp|lt|gt|quot);)/g, '&amp;');
 
   // Truncate if needed
   if (formatted.length > TELEGRAM_MAX_LENGTH) {
@@ -68,7 +87,7 @@ function formatForTelegram(text: string): string {
     if (lastSpace > TELEGRAM_MAX_LENGTH - 100) {
       formatted = formatted.substring(0, lastSpace);
     }
-    formatted += '\n\n(truncated)';
+    formatted += '\n\n<i>(truncated)</i>';
   }
 
   return formatted;

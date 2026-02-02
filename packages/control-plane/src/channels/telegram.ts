@@ -211,7 +211,7 @@ export async function sendToTelegram(text: string): Promise<void> {
   if (!bot || !authorizedChatId) return;
 
   try {
-    await bot.api.sendMessage(authorizedChatId, text);
+    await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });
   } catch (error) {
     console.error('Failed to send Telegram message:', error);
   }

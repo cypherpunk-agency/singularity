@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store';
 import { format } from 'date-fns';
 import clsx from 'clsx';
+import Markdown from 'react-markdown';
 
 export function Chat() {
   const { messages, messagesLoading, sendingMessage, sendMessage, agentProcessing, currentRunId, setActiveView } = useStore();
@@ -61,7 +62,9 @@ export function Chat() {
                       : 'bg-slate-700 text-slate-100'
                   )}
                 >
-                  <div className="whitespace-pre-wrap break-words">{message.text}</div>
+                  <div className="prose prose-invert prose-sm max-w-none prose-p:text-inherit prose-p:my-1 prose-headings:text-inherit prose-headings:mt-2 prose-headings:mb-1 prose-strong:text-inherit prose-code:text-primary-300 prose-code:bg-slate-800/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-slate-800 prose-pre:my-2 prose-a:text-primary-400 prose-li:text-inherit prose-li:my-0 prose-ul:my-1 prose-ol:my-1">
+                    <Markdown>{message.text}</Markdown>
+                  </div>
                   <div
                     className={clsx(
                       'text-xs mt-1 flex items-center gap-2',

@@ -10,10 +10,16 @@ export function Chat() {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isInitialLoad = useRef(true);
 
   // Auto-scroll to bottom when new messages arrive or typing indicator appears
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0 || agentProcessing) {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: isInitialLoad.current ? 'instant' : 'smooth'
+      });
+      isInitialLoad.current = false;
+    }
   }, [messages, agentProcessing]);
 
   const handleSubmit = async (e: React.FormEvent) => {

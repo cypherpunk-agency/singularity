@@ -98,6 +98,8 @@ agent/
 ├── config/           # Agent configuration (mutable)
 │   ├── SOUL.md       # Core identity (all contexts)
 │   ├── CONVERSATION.md # Chat-specific instructions
+│   ├── TELEGRAM.md   # Telegram-specific instructions (optional)
+│   ├── WEB.md        # Web-specific instructions (optional)
 │   ├── HEARTBEAT.md  # Cron-specific instructions + heartbeat tasks
 │   └── TOOLS.md      # Agent tools documentation
 ├── memory/           # Daily activity logs
@@ -123,9 +125,11 @@ The agent uses per-channel sessions with cross-session memory:
 
 | Context Type | System Prompt | History | Shared Memory |
 |--------------|---------------|---------|---------------|
-| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, TASKS.md |
-| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, TASKS.md |
+| Web chat | SOUL.md + CONVERSATION.md + WEB.md* | conversation/web/ | MEMORY.md, TASKS.md |
+| Telegram | SOUL.md + CONVERSATION.md + TELEGRAM.md* | conversation/telegram/ | MEMORY.md, TASKS.md |
 | Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, TASKS.md |
+
+*Channel-specific config files (WEB.md, TELEGRAM.md) are optional and loaded if present.
 
 All contexts share `MEMORY.md` and `TASKS.md` for cross-session continuity.
 

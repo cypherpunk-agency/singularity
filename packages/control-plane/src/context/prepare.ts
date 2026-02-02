@@ -211,6 +211,19 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       metadata.components.modeInstructions = tokens;
     }
 
+    // 2b. Channel-specific instructions (e.g., TELEGRAM.md, WEB.md)
+    if (channel) {
+      const channelConfig = await readFileSafe(
+        path.join(basePath, 'agent', 'config', `${channel.toUpperCase()}.md`)
+      );
+      if (channelConfig) {
+        parts.push(channelConfig);
+        const tokens = estimateTokens(channelConfig);
+        usedTokens += tokens;
+        metadata.components.modeInstructions += tokens;
+      }
+    }
+
     // 3. Conversation history (with cross-day support)
     if (channel) {
       const remainingBudget = tokenBudget - usedTokens - 2500; // Reserve for memory + tasks

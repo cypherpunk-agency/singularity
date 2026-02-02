@@ -5,6 +5,7 @@ import { QueuedRun } from '@singularity/shared';
 import { queueManager } from './manager.js';
 import { prepareContext } from '../context/index.js';
 import { getUnprocessedMessages, markMessagesAsProcessed } from '../conversation.js';
+import { extractAndRouteResponse } from '../response/extractor.js';
 import { WSManager } from '../ws/events.js';
 
 /**
@@ -231,6 +232,22 @@ export class QueueWorker {
     if (messageIds.length > 0 && channel) {
       await markMessagesAsProcessed(channel, messageIds);
       console.log(`[QueueWorker] Marked ${messageIds.length} messages as processed`);
+    }
+
+    // Extract and route response for chat runs
+    if (type === 'chat' && channel && this.wsManager) {
+      try {
+        await extractAndRouteResponse({
+          runId,
+          type,
+          channel,
+          exit_code: 0,
+          outputFile: path.join(basePath, 'logs', 'agent-output', `${runId}.json`),
+        }, this.wsManager);
+        console.log(`[QueueWorker] Extracted and routed response for ${runId}`);
+      } catch (error) {
+        console.error(`[QueueWorker] Failed to extract response:`, error);
+      }
     }
   }
 }

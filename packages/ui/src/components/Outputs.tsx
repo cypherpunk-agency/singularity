@@ -165,7 +165,7 @@ export function Outputs() {
                 </div>
               </div>
               {sessionDetails.metadata.result && (
-                <div className="text-sm text-slate-300 bg-slate-800 p-2 rounded">
+                <div className="text-sm text-slate-300 bg-slate-800 p-2 rounded max-h-32 overflow-y-auto">
                   {sessionDetails.metadata.result}
                 </div>
               )}

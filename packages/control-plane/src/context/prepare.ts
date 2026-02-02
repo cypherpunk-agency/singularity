@@ -286,13 +286,19 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     }
   }
 
-  // 5. TASKS.md
-  const tasks = await readFileSafe(path.join(basePath, 'agent', 'TASKS.md'));
-  if (tasks) {
-    parts.push(`## Current Tasks\n${tasks}`);
-    const tokens = estimateTokens(tasks);
-    usedTokens += tokens;
-    metadata.components.tasks = tokens;
+  // 5. TASKS.md (lazy-load: always for cron, conditional for chat)
+  const shouldInjectTasks =
+    type === 'cron' ||  // Always for heartbeat
+    (query && /\b(task|tasks|todo|todos|working on|what are you doing|progress|to-do|to do)\b/i.test(query));
+
+  if (shouldInjectTasks) {
+    const tasks = await readFileSafe(path.join(basePath, 'agent', 'TASKS.md'));
+    if (tasks) {
+      parts.push(`## Current Tasks\n${tasks}`);
+      const tokens = estimateTokens(tasks);
+      usedTokens += tokens;
+      metadata.components.tasks = tokens;
+    }
   }
 
   metadata.totalTokensEstimate = usedTokens;

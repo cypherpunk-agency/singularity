@@ -70,6 +70,10 @@ su -s /bin/bash agent -c 'node /app/packages/control-plane/dist/index.js' &
 CONTROL_PLANE_PID=$!
 echo "[$(date -Iseconds)] Control plane started (PID: $CONTROL_PLANE_PID)"
 
+# Start restart watcher in background (runs as root to manage processes)
+echo "[$(date -Iseconds)] Starting restart watcher..."
+/app/scripts/watch-restart.sh &
+
 # Wait for control plane to be ready
 for i in {1..30}; do
     if curl -s http://localhost:${CONTROL_PLANE_PORT:-3001}/health > /dev/null 2>&1; then

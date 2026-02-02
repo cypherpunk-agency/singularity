@@ -11,11 +11,8 @@ logs/*
 logs/agent-output/*
 !logs/agent-output/.gitkeep
 
-# Agent workspace (runtime state, except config)
-agent/*
-!agent/config/
-
-# Config was moved to agent/config/
+# Agent workspace (runtime state, config lives here but is not tracked)
+agent/
 
 # Python
 __pycache__/

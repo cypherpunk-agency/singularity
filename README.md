@@ -59,6 +59,10 @@ The Control Center provides a web-based interface to interact with and monitor t
    ```
 4. Chat with your agent from anywhere via Telegram
 
+**Interaction:**
+- Send a message and the bot will show "typing..." while processing
+- Voice messages are transcribed locally, then processed by the agent
+
 ## Manual Testing
 
 Queue a heartbeat run:

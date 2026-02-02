@@ -16,6 +16,9 @@ function getBasePath(): string {
 let bot: Bot | null = null;
 let authorizedChatId: string | null = null;
 
+// Track active typing indicators by chat ID
+const activeTypingIntervals = new Map<string, NodeJS.Timeout>();
+
 export function startTelegramBot(wsManager: WSManager): void {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -132,8 +135,8 @@ Or just send any text to chat with the agent.`);
       const message = await saveHumanMessage(text, 'telegram');
       wsManager.broadcastChatMessage(message);
 
-      // React with thumbs up to acknowledge receipt
-      await ctx.react('👍');
+      // Start typing indicator while agent processes
+      startTypingIndicator(ctx.chat.id);
 
       // Trigger agent with telegram channel context and vector search
       // Agent response will be auto-extracted and sent when run completes
@@ -151,8 +154,8 @@ Or just send any text to chat with the agent.`);
     }
 
     try {
-      // Acknowledge receipt (🎧 is closest available to microphone)
-      await ctx.react('🎉');
+      // Start typing indicator while transcribing
+      startTypingIndicator(ctx.chat.id);
 
       // Download voice file from Telegram
       const file = await ctx.getFile();
@@ -170,6 +173,9 @@ Or just send any text to chat with the agent.`);
 
       // Reply with transcription first
       await ctx.reply(`Transcription: ${transcription}`);
+
+      // Restart typing indicator for agent processing
+      startTypingIndicator(ctx.chat.id);
 
       // Then process as regular chat message
       const message = await saveHumanMessage(transcription, 'telegram');
@@ -197,6 +203,29 @@ function isAuthorized(ctx: Context): boolean {
     return true;
   }
   return String(ctx.chat?.id) === authorizedChatId;
+}
+
+function startTypingIndicator(chatId: string | number): void {
+  const id = String(chatId);
+  // Clear any existing interval
+  stopTypingIndicator(id);
+
+  // Send immediately, then every 4 seconds
+  bot?.api.sendChatAction(id, 'typing').catch(() => {});
+
+  const interval = setInterval(() => {
+    bot?.api.sendChatAction(id, 'typing').catch(() => {});
+  }, 4000);
+
+  activeTypingIntervals.set(id, interval);
+}
+
+function stopTypingIndicator(chatId: string): void {
+  const interval = activeTypingIntervals.get(chatId);
+  if (interval) {
+    clearInterval(interval);
+    activeTypingIntervals.delete(chatId);
+  }
 }
 
 async function getAgentStatus() {
@@ -248,6 +277,9 @@ async function getAgentStatus() {
  */
 export async function sendToTelegram(text: string): Promise<void> {
   if (!bot || !authorizedChatId) return;
+
+  // Stop typing indicator when sending response
+  stopTypingIndicator(authorizedChatId);
 
   try {
     await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });

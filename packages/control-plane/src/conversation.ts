@@ -109,12 +109,12 @@ export async function getConversationDates(channel: Channel): Promise<string[]> 
  * Get recent messages from a channel
  */
 export async function getRecentMessages(channel: Channel, limit: number = 50): Promise<Message[]> {
-  const dates = await getConversationDates(channel);
+  const dates = await getConversationDates(channel); // Already newest first
 
   const allMessages: Message[] = [];
-  for (const date of dates.reverse()) {
+  for (const date of dates) { // Iterate newest first (no .reverse())
     const messages = await getConversationHistory(channel, date);
-    allMessages.push(...messages);
+    allMessages.unshift(...messages); // Prepend to maintain chronological order
 
     // Stop if we have enough messages
     if (allMessages.length >= limit) {
@@ -122,7 +122,7 @@ export async function getRecentMessages(channel: Channel, limit: number = 50): P
     }
   }
 
-  // Return the last N messages
+  // Return the last N messages (most recent)
   return allMessages.slice(-limit);
 }
 

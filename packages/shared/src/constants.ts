@@ -92,5 +92,7 @@ export const TELEGRAM_COMMANDS = {
   HISTORY: '/history',
   SEARCH: '/search',
   RUN: '/run',
+  TASKS: '/tasks',
+  SETTINGS: '/settings',
   HELP: '/help',
 } as const;

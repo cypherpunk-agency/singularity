@@ -1,10 +1,11 @@
-import { Bot, Context } from 'grammy';
+import { Bot, Context, InlineKeyboard } from 'grammy';
 import { TELEGRAM_COMMANDS } from '@singularity/shared';
 import { WSManager } from '../ws/events.js';
 import { saveHumanMessage, getRecentConversation } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
 import { queueManager } from '../queue/manager.js';
 import { transcribe } from '../services/transcription.js';
+import { getTelegramPreferences, setTelegramPreferences } from './telegram-preferences.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -13,13 +14,13 @@ function getBasePath(): string {
   return process.env.APP_DIR || '/app';
 }
 
-let bot: Bot | null = null;
-let authorizedChatId: string | null = null;
+export let bot: Bot | null = null;
+export let authorizedChatId: string | null = null;
 
 // Track active typing indicators by chat ID
 const activeTypingIntervals = new Map<string, NodeJS.Timeout>();
 
-export function startTelegramBot(wsManager: WSManager): void {
+export async function startTelegramBot(wsManager: WSManager): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -44,9 +45,11 @@ export function startTelegramBot(wsManager: WSManager): void {
     if (!isAuthorized(ctx)) return;
     await ctx.reply(`Available commands:
 ${TELEGRAM_COMMANDS.STATUS} - Current agent status
+${TELEGRAM_COMMANDS.TASKS} - List current tasks
 ${TELEGRAM_COMMANDS.HISTORY} - Recent conversation summary
 ${TELEGRAM_COMMANDS.SEARCH} <query> - Search memory/files
 ${TELEGRAM_COMMANDS.RUN} - Trigger immediate agent run
+${TELEGRAM_COMMANDS.SETTINGS} - Output settings (text/voice)
 
 Or just send any text to chat with the agent.`);
   });
@@ -115,6 +118,70 @@ Or just send any text to chat with the agent.`);
       }
     } catch (error) {
       await ctx.reply('Failed to trigger run: ' + error);
+    }
+  });
+
+  bot.command('tasks', async (ctx) => {
+    if (!isAuthorized(ctx)) return;
+
+    try {
+      startTypingIndicator(ctx.chat.id);
+
+      const tasksPrompt = `Read TASKS.md and provide a concise summary for Telegram.
+Include: priority tasks, ongoing items, blocked tasks.
+Format it nicely for mobile reading.`;
+
+      const queueId = await triggerAgentRun({
+        type: 'chat',
+        channel: 'telegram',
+        prompt: tasksPrompt,
+      });
+
+      if (!queueId) {
+        stopTypingIndicator(String(ctx.chat.id));
+        await ctx.reply('Agent run already pending');
+      }
+    } catch (error) {
+      stopTypingIndicator(String(ctx.chat.id));
+      await ctx.reply('Failed to get tasks: ' + error);
+    }
+  });
+
+  bot.command('settings', async (ctx) => {
+    if (!isAuthorized(ctx)) return;
+
+    try {
+      const prefs = await getTelegramPreferences();
+      const keyboard = new InlineKeyboard()
+        .text(prefs.outputMode === 'text' ? '✓ Text' : 'Text', 'output:text')
+        .text(prefs.outputMode === 'voice' ? '✓ Voice' : 'Voice', 'output:voice');
+
+      await ctx.reply('Output Mode:', { reply_markup: keyboard });
+    } catch (error) {
+      await ctx.reply('Failed to load settings: ' + error);
+    }
+  });
+
+  // Handle callback queries for settings buttons
+  bot.callbackQuery(/^output:/, async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.answerCallbackQuery('Unauthorized');
+      return;
+    }
+
+    try {
+      const mode = ctx.callbackQuery.data.split(':')[1] as 'text' | 'voice';
+      await setTelegramPreferences({ outputMode: mode });
+
+      // Update keyboard to show new selection
+      const keyboard = new InlineKeyboard()
+        .text(mode === 'text' ? '✓ Text' : 'Text', 'output:text')
+        .text(mode === 'voice' ? '✓ Voice' : 'Voice', 'output:voice');
+
+      await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+      await ctx.answerCallbackQuery(`Output mode: ${mode}`);
+    } catch (error) {
+      await ctx.answerCallbackQuery('Failed to update setting');
     }
   });
 
@@ -191,6 +258,9 @@ Or just send any text to chat with the agent.`);
   bot.catch((err) => {
     console.error('Telegram bot error:', err);
   });
+
+  // Register commands menu
+  await registerBotCommands();
 
   // Start the bot
   bot.start();
@@ -282,7 +352,16 @@ export async function sendToTelegram(text: string): Promise<void> {
   stopTypingIndicator(authorizedChatId);
 
   try {
-    await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });
+    const prefs = await getTelegramPreferences();
+
+    if (prefs.outputMode === 'voice') {
+      // TODO: TTS implementation will go here
+      // For now, send text with indicator
+      const voiceText = `🔊 <i>[Voice mode - TTS coming soon]</i>\n\n${text}`;
+      await bot.api.sendMessage(authorizedChatId, voiceText, { parse_mode: 'HTML' });
+    } else {
+      await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });
+    }
   } catch (error) {
     // If HTML parsing failed, fallback to plain text
     if (error instanceof Error && error.message.includes("can't parse entities")) {
@@ -317,4 +396,25 @@ function stripHtmlForPlainText(html: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
+}
+
+/**
+ * Register bot commands in Telegram's menu
+ */
+async function registerBotCommands(): Promise<void> {
+  if (!bot) return;
+
+  try {
+    await bot.api.setMyCommands([
+      { command: 'status', description: 'Show agent status' },
+      { command: 'tasks', description: 'List current tasks' },
+      { command: 'history', description: 'Recent conversation' },
+      { command: 'run', description: 'Trigger agent run' },
+      { command: 'settings', description: 'Output settings' },
+      { command: 'help', description: 'Show commands' },
+    ]);
+    console.log('Telegram bot commands registered');
+  } catch (error) {
+    console.error('Failed to register bot commands:', error);
+  }
 }

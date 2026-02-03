@@ -12,6 +12,7 @@ import { registerDebugRoutes } from './api/debug.js';
 import { registerQueueRoutes } from './api/queue.js';
 import { registerInterviewProxyRoutes } from './api/interview-proxy.js';
 import { registerJobsProxyRoutes } from './api/jobs-proxy.js';
+import { registerTelegramFilesRoutes } from './api/telegram-files.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
@@ -85,6 +86,7 @@ async function main() {
   await registerQueueRoutes(fastify);
   await registerInterviewProxyRoutes(fastify);
   await registerJobsProxyRoutes(fastify);
+  await registerTelegramFilesRoutes(fastify);
 
   // Start file watcher
   startFileWatcher(wsManager);
@@ -95,7 +97,7 @@ async function main() {
 
   // Start Telegram bot (if configured)
   if (process.env.TELEGRAM_BOT_TOKEN) {
-    startTelegramBot(wsManager);
+    await startTelegramBot(wsManager);
   }
 
   // Serve static UI files in production

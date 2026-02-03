@@ -8,6 +8,35 @@ import { getUnprocessedMessages, markMessagesAsProcessed } from '../conversation
 import { extractAndRouteResponse } from '../response/extractor.js';
 import { WSManager } from '../ws/events.js';
 
+interface OutputValidation {
+  isSuccess: boolean;
+  errorMessage?: string;
+}
+
+/**
+ * Validate agent output for semantic errors (e.g., API Error 500).
+ * Even if the process exits with code 0, the output may contain error info.
+ */
+async function validateAgentOutput(outputFile: string): Promise<OutputValidation> {
+  try {
+    const content = await fs.readFile(outputFile, 'utf-8');
+    const output = JSON.parse(content);
+
+    // Check for explicit error in output
+    if (output.subtype === 'error' || output.is_error === true) {
+      return {
+        isSuccess: false,
+        errorMessage: output.result || 'API returned error',
+      };
+    }
+
+    return { isSuccess: true };
+  } catch {
+    // Parse error or missing file - let existing logic handle
+    return { isSuccess: true };
+  }
+}
+
 /**
  * Generate a run ID in the format YYYYMMDD-HHMMSS
  */
@@ -223,15 +252,26 @@ export class QueueWorker {
         stderr += data.toString();
       });
 
-      proc.on('close', (code) => {
-        if (code === 0) {
-          console.log(`[QueueWorker] Agent completed successfully: runId=${runId}`);
-          resolve();
-        } else {
+      proc.on('close', async (code) => {
+        if (code !== 0) {
           console.error(`[QueueWorker] Agent failed with code ${code}: runId=${runId}`);
           console.error(`[QueueWorker] stderr: ${stderr.slice(-500)}`);
           reject(new Error(`Agent exited with code ${code}`));
+          return;
         }
+
+        // Process succeeded - validate output for semantic errors
+        const outputFile = path.join(basePath, 'logs', 'agent-output', `${runId}.json`);
+        const validation = await validateAgentOutput(outputFile);
+
+        if (!validation.isSuccess) {
+          console.error(`[QueueWorker] Agent returned error: ${validation.errorMessage}`);
+          reject(new Error(validation.errorMessage || 'Agent returned error'));
+          return;
+        }
+
+        console.log(`[QueueWorker] Agent completed successfully: runId=${runId}`);
+        resolve();
       });
 
       proc.on('error', (error) => {

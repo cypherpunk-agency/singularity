@@ -72,9 +72,26 @@ export function Outputs() {
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {format(new Date(session.timestamp), 'MMM d, HH:mm')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {format(new Date(session.timestamp), 'MMM d, HH:mm')}
+                    </span>
+                    {session.channel && (
+                      <span className={clsx(
+                        'text-xs px-1.5 py-0.5 rounded font-medium',
+                        session.channel === 'web'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-purple-600 text-white'
+                      )}>
+                        {session.channel}
+                      </span>
+                    )}
+                    {session.runType === 'cron' && !session.channel && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-slate-600 text-white">
+                        cron
+                      </span>
+                    )}
+                  </div>
                   {session.metadata.subtype && (
                     <span className={clsx(
                       'text-xs px-2 py-0.5 rounded',
@@ -164,7 +181,12 @@ export function Outputs() {
                   )}
                 </div>
               </div>
-              {sessionDetails.metadata.result && (
+              {sessionDetails.metadata.subtype === 'error' && sessionDetails.metadata.result ? (
+                <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded border border-red-800 mt-2">
+                  <span className="font-medium">Error: </span>
+                  {sessionDetails.metadata.result}
+                </div>
+              ) : sessionDetails.metadata.result && (
                 <div className="text-sm text-slate-300 bg-slate-800 p-2 rounded max-h-32 overflow-y-auto">
                   {sessionDetails.metadata.result}
                 </div>

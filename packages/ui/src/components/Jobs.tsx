@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { JobApplication, JobAnalytics } from '@singularity/shared';
 import clsx from 'clsx';
 
-const JOB_TRACKER_API = 'http://localhost:3002';
+const JOB_TRACKER_API = '/api/jobs-backend';
 
 const statusColors = {
   applied: 'bg-blue-500/10 text-blue-400 border-blue-500/20',

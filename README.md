@@ -227,6 +227,8 @@ See [docs/CONTEXT.md](docs/CONTEXT.md) for details on intelligent context prepar
 | `GET` | `/api/queue` | List pending runs |
 | `GET` | `/api/queue/status` | Current queue status (pending count, processing run) |
 | `GET` | `/api/queue/:id` | Get specific run status |
+| `ALL` | `/api/interview/*` | Proxy to Interview Prep API |
+| `ALL` | `/api/jobs-backend/*` | Proxy to Job Tracker API |
 
 ### WebSocket Events
 
@@ -301,6 +303,8 @@ All runs go through the queue to prevent concurrent execution. Chat runs have hi
 | `VECTOR_SERVICE_URL` | `http://vector:5000` | Vector search service URL |
 | `TELEGRAM_BOT_TOKEN` | (empty) | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | (empty) | Your Telegram chat ID |
+| `INTERVIEW_API_URL` | `http://localhost:3003` | Interview Prep API URL (proxied) |
+| `JOB_TRACKER_API_URL` | `http://localhost:3002` | Job Tracker API URL (proxied) |
 
 ## Development
 

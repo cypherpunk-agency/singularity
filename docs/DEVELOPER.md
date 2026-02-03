@@ -17,6 +17,9 @@
 | `packages/control-plane/src/utils/agent.ts` | Agent triggering with channel/type support |
 | `packages/control-plane/src/api/sessions.ts` | Session listing and retrieval |
 | `packages/control-plane/src/api/queue.ts` | Queue visibility endpoints |
+| `packages/control-plane/src/api/proxy.ts` | Generic proxy utility for internal APIs |
+| `packages/control-plane/src/api/interview-proxy.ts` | Interview Prep API proxy |
+| `packages/control-plane/src/api/jobs-proxy.ts` | Job Tracker API proxy |
 | `packages/control-plane/src/queue/manager.ts` | Queue operations (enqueue, dequeue, complete) |
 | `packages/control-plane/src/queue/worker.ts` | Sequential run processor |
 | `packages/control-plane/src/queue/storage.ts` | JSONL queue persistence |
@@ -94,6 +97,8 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 | `GET /api/queue/status` | `api/queue.ts` | Queue status (pending count, processing run) |
 | `GET /api/queue/:id` | `api/queue.ts` | Get specific queued run |
 | `GET /health` | `index.ts` | Health check |
+| `ALL /api/interview/*` | `api/interview-proxy.ts` | Proxy to Interview Prep API (port 3003) |
+| `ALL /api/jobs-backend/*` | `api/jobs-proxy.ts` | Proxy to Job Tracker API (port 3002) |
 
 ## WebSocket Events
 
@@ -162,6 +167,7 @@ All agent runs go through a queue to prevent concurrent execution:
 - **Run history append-only**: `state/run-history.jsonl` - JSONL format
 - **Queue persistence**: `state/queue.jsonl` - JSONL with cleanup
 - **Input logging**: `logs/agent-input/` - full context sent to Claude for debugging
+- **Internal API proxy**: `api/proxy.ts` - forward requests to internal services through control plane
 
 ## Dev Commands
 
@@ -214,3 +220,25 @@ docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type chat --c
 2. Create directory structure in `entrypoint.sh`
 3. Add to watch patterns in `shared/constants.ts`
 4. Handle in `conversation.ts` and `watcher/files.ts`
+
+**New internal API proxy:**
+1. Create proxy route in `packages/control-plane/src/api/{name}-proxy.ts`
+2. Use `proxyRequest()` from `proxy.ts` with target URL and prefix config
+3. Register in `index.ts`
+4. Update UI components to use relative paths (e.g., `/api/{name}/*`)
+5. Add env var for target URL (default to localhost port)
+
+Example proxy config:
+```typescript
+// /api/myservice/* → http://localhost:4000/api/*
+proxyRequest(request, {
+  targetUrl: process.env.MYSERVICE_URL || 'http://localhost:4000',
+  stripPrefix: '/api/myservice',
+  addPrefix: '/api',
+});
+```
+
+| Proxy Route | Target | Env Var |
+|-------------|--------|---------|
+| `/api/interview/*` | `http://localhost:3003/*` | `INTERVIEW_API_URL` |
+| `/api/jobs-backend/*` | `http://localhost:3002/api/*` | `JOB_TRACKER_API_URL` |

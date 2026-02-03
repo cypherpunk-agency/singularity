@@ -10,6 +10,8 @@ import { registerOutputsRoutes } from './api/outputs.js';
 import { registerSessionsRoutes } from './api/sessions.js';
 import { registerDebugRoutes } from './api/debug.js';
 import { registerQueueRoutes } from './api/queue.js';
+import { registerInterviewProxyRoutes } from './api/interview-proxy.js';
+import { registerJobsProxyRoutes } from './api/jobs-proxy.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
@@ -81,6 +83,8 @@ async function main() {
   await registerSessionsRoutes(fastify);
   await registerDebugRoutes(fastify);
   await registerQueueRoutes(fastify);
+  await registerInterviewProxyRoutes(fastify);
+  await registerJobsProxyRoutes(fastify);
 
   // Start file watcher
   startFileWatcher(wsManager);

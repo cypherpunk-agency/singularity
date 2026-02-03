@@ -80,18 +80,59 @@ function formatForTelegram(text: string): string {
   // This is a simplified approach - in production, use a proper HTML escaping library
   formatted = formatted.replace(/&(?!(amp|lt|gt|quot);)/g, '&amp;');
 
-  // Truncate if needed
+  // Truncate if needed - safely close any open HTML tags
   if (formatted.length > TELEGRAM_MAX_LENGTH) {
-    formatted = formatted.substring(0, TELEGRAM_MAX_LENGTH);
-    // Try to cut at a word boundary
-    const lastSpace = formatted.lastIndexOf(' ');
-    if (lastSpace > TELEGRAM_MAX_LENGTH - 100) {
-      formatted = formatted.substring(0, lastSpace);
-    }
-    formatted += '\n\n<i>(truncated)</i>';
+    formatted = safeHtmlTruncate(formatted, TELEGRAM_MAX_LENGTH);
   }
 
   return formatted;
+}
+
+/**
+ * Safely truncate HTML while closing any open tags
+ * Prevents malformed HTML from breaking Telegram API
+ */
+function safeHtmlTruncate(html: string, maxLength: number): string {
+  if (html.length <= maxLength) return html;
+
+  // Track open tags
+  const openTags: string[] = [];
+  const tagRegex = /<(\/?)(pre|code|b|i)>/gi;
+  let match;
+  let lastSafeIndex = 0;
+
+  while ((match = tagRegex.exec(html)) !== null) {
+    if (match.index >= maxLength) break;
+
+    const isClosing = match[1] === '/';
+    const tagName = match[2].toLowerCase();
+
+    if (isClosing) {
+      // Remove matching open tag
+      const idx = openTags.lastIndexOf(tagName);
+      if (idx !== -1) openTags.splice(idx, 1);
+    } else {
+      openTags.push(tagName);
+    }
+
+    // Safe truncation point is after complete tags (when all tags are closed)
+    if (openTags.length === 0) {
+      lastSafeIndex = match.index + match[0].length;
+    }
+  }
+
+  // Truncate at safe point or max length
+  let truncateAt = Math.min(lastSafeIndex || maxLength, maxLength);
+  let result = html.substring(0, truncateAt);
+
+  // Close any remaining open tags in reverse order
+  while (openTags.length > 0) {
+    const tag = openTags.pop();
+    result += `</${tag}>`;
+  }
+
+  result += '\n\n<i>(truncated - full response in web UI)</i>';
+  return result;
 }
 
 /**

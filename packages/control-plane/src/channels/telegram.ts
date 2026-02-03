@@ -284,6 +284,37 @@ export async function sendToTelegram(text: string): Promise<void> {
   try {
     await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });
   } catch (error) {
-    console.error('Failed to send Telegram message:', error);
+    // If HTML parsing failed, fallback to plain text
+    if (error instanceof Error && error.message.includes("can't parse entities")) {
+      console.warn('Telegram HTML parsing failed, falling back to plain text');
+      const plainText = stripHtmlForPlainText(text);
+      try {
+        await bot.api.sendMessage(authorizedChatId, plainText);
+      } catch (fallbackError) {
+        console.error('Telegram fallback also failed:', fallbackError);
+      }
+    } else {
+      console.error('Failed to send Telegram message:', error);
+    }
   }
+}
+
+/**
+ * Strip HTML tags and convert back to markdown-ish plain text
+ * Used as fallback when Telegram rejects malformed HTML
+ */
+function stripHtmlForPlainText(html: string): string {
+  return html
+    .replace(/<pre>/g, '```\n')
+    .replace(/<\/pre>/g, '\n```')
+    .replace(/<code>/g, '`')
+    .replace(/<\/code>/g, '`')
+    .replace(/<b>/g, '*')
+    .replace(/<\/b>/g, '*')
+    .replace(/<i>/g, '_')
+    .replace(/<\/i>/g, '_')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }

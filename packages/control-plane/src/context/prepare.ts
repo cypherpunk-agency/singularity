@@ -166,7 +166,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   };
 
   // 1. SOUL.md (always included)
-  const soul = await readFileSafe(path.join(basePath, 'agent', 'config', 'SOUL.md'));
+  const soul = await readFileSafe(path.join(basePath, 'agent', 'context', 'SOUL.md'));
   if (soul) {
     parts.push(soul);
     const soulTokens = estimateTokens(soul);
@@ -174,8 +174,8 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul = soulTokens;
   }
 
-  // 1b. SYSTEM.md (always included after SOUL, before TOOLS)
-  const system = await readFileSafe(path.join(basePath, 'agent', 'config', 'SYSTEM.md'));
+  // 1b. SYSTEM.md (always included after SOUL)
+  const system = await readFileSafe(path.join(basePath, 'agent', 'context', 'SYSTEM.md'));
   if (system) {
     parts.push(system);
     const systemTokens = estimateTokens(system);
@@ -183,19 +183,9 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul += systemTokens; // Count with soul
   }
 
-  // 1c. TOOLS.md (always included after SYSTEM)
-  const tools = await readFileSafe(path.join(basePath, 'agent', 'config', 'TOOLS.md'));
-  if (tools) {
-    parts.push(tools);
-    const toolsTokens = estimateTokens(tools);
-    usedTokens += toolsTokens;
-    // Tools are counted as part of soul for simplicity
-    metadata.components.soul += toolsTokens;
-  }
-
   // 2. Mode-specific instructions
   if (type === 'cron') {
-    const heartbeat = await readFileSafe(path.join(basePath, 'agent', 'config', 'HEARTBEAT.md'));
+    const heartbeat = await readFileSafe(path.join(basePath, 'agent', 'context', 'HEARTBEAT.md'));
     if (heartbeat) {
       parts.push(heartbeat);
       const tokens = estimateTokens(heartbeat);
@@ -203,7 +193,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       metadata.components.modeInstructions = tokens;
     }
   } else {
-    const conversation = await readFileSafe(path.join(basePath, 'agent', 'config', 'CONVERSATION.md'));
+    const conversation = await readFileSafe(path.join(basePath, 'agent', 'context', 'CONVERSATION.md'));
     if (conversation) {
       parts.push(conversation);
       const tokens = estimateTokens(conversation);
@@ -214,7 +204,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     // 2b. Channel-specific instructions (e.g., TELEGRAM.md, WEB.md)
     if (channel) {
       const channelConfig = await readFileSafe(
-        path.join(basePath, 'agent', 'config', `${channel.toUpperCase()}.md`)
+        path.join(basePath, 'agent', 'context', `${channel.toUpperCase()}.md`)
       );
       if (channelConfig) {
         parts.push(channelConfig);

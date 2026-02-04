@@ -17,6 +17,33 @@ function getVectorServiceUrl(): string {
   return process.env.VECTOR_SERVICE_URL || 'http://vector:5000';
 }
 
+// Recursively list all .md files in a directory
+async function listMdFilesRecursive(dir: string, baseDir: string, files: FileInfo[]): Promise<void> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        // Recurse into subdirectories (skip hidden dirs)
+        await listMdFilesRecursive(fullPath, baseDir, files);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const stat = await fs.stat(fullPath);
+        files.push({
+          path: relativePath,
+          name: entry.name,
+          type: 'file',
+          size: stat.size,
+          modified: stat.mtime.toISOString(),
+        });
+      }
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+}
+
 export async function registerFilesRoutes(fastify: FastifyInstance) {
   // List workspace files
   fastify.get<{
@@ -25,16 +52,16 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     const agentDir = getAgentDir();
     const files: FileInfo[] = [];
 
-    // List all .md files in root agent directory
+    // List all .md files in root agent directory (non-recursive)
     try {
-      const rootFiles = await fs.readdir(agentDir);
-      for (const fileName of rootFiles) {
-        if (fileName.endsWith('.md')) {
-          const filePath = path.join(agentDir, fileName);
+      const rootEntries = await fs.readdir(agentDir, { withFileTypes: true });
+      for (const entry of rootEntries) {
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const filePath = path.join(agentDir, entry.name);
           const stat = await fs.stat(filePath);
           files.push({
-            path: fileName,
-            name: fileName,
+            path: entry.name,
+            name: entry.name,
             type: 'file',
             size: stat.size,
             modified: stat.mtime.toISOString(),
@@ -45,26 +72,13 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
       // Root dir read error
     }
 
-    // List memory files
+    // Recursively list memory files
     const memoryDir = path.join(agentDir, 'memory');
-    try {
-      const memoryFiles = await fs.readdir(memoryDir);
-      for (const fileName of memoryFiles) {
-        if (fileName.endsWith('.md')) {
-          const filePath = path.join(memoryDir, fileName);
-          const stat = await fs.stat(filePath);
-          files.push({
-            path: `memory/${fileName}`,
-            name: fileName,
-            type: 'file',
-            size: stat.size,
-            modified: stat.mtime.toISOString(),
-          });
-        }
-      }
-    } catch {
-      // Memory dir doesn't exist
-    }
+    await listMdFilesRecursive(memoryDir, agentDir, files);
+
+    // Recursively list config files
+    const configDir = path.join(agentDir, 'config');
+    await listMdFilesRecursive(configDir, agentDir, files);
 
     // Sort by modified date, newest first
     files.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
@@ -137,12 +151,6 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     const fullPath = path.join(agentDir, filePath);
     const normalizedPath = path.normalize(fullPath);
     if (!normalizedPath.startsWith(agentDir)) {
-      reply.code(403).send({ success: false, path: filePath });
-      return;
-    }
-
-    // Don't allow writing to TASKS.md (agent-managed)
-    if (filePath === 'TASKS.md') {
       reply.code(403).send({ success: false, path: filePath });
       return;
     }

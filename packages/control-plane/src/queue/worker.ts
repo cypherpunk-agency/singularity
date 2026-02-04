@@ -307,6 +307,19 @@ export class QueueWorker {
 
     console.log(`[QueueWorker] Executing chat run: runId=${runId}, channel=${channel}, messages=${messageIds.length}`);
 
+    // Start typing indicator for telegram channel
+    // This ensures the indicator runs even for batched messages (after first response stops it)
+    if (channel === 'telegram') {
+      try {
+        const { startTypingIndicator, authorizedChatId } = await import('../channels/telegram.js');
+        if (authorizedChatId) {
+          startTypingIndicator(authorizedChatId);
+        }
+      } catch (error) {
+        console.warn('[QueueWorker] Failed to start typing indicator:', error);
+      }
+    }
+
     // Spawn the agent script with appropriate arguments
     const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
 

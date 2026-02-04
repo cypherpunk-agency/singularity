@@ -4,6 +4,7 @@ import { WSManager } from '../ws/events.js';
 import { saveHumanMessage, getRecentConversation } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
 import { queueManager } from '../queue/manager.js';
+import { queueWorker } from '../queue/worker.js';
 import { transcribe } from '../services/transcription.js';
 import { synthesize } from '../services/tts.js';
 import { getTelegramPreferences, setTelegramPreferences } from './telegram-preferences.js';
@@ -47,7 +48,6 @@ export async function startTelegramBot(wsManager: WSManager): Promise<void> {
     if (!isAuthorized(ctx)) return;
     await ctx.reply(`Available commands:
 ${TELEGRAM_COMMANDS.STATUS} - Current agent status
-${TELEGRAM_COMMANDS.TASKS} - List current tasks
 ${TELEGRAM_COMMANDS.HISTORY} - Recent conversation summary
 ${TELEGRAM_COMMANDS.SEARCH} <query> - Search memory/files
 ${TELEGRAM_COMMANDS.RUN} - Trigger immediate agent run
@@ -123,32 +123,6 @@ Or just send any text to chat with the agent.`);
     }
   });
 
-  bot.command('tasks', async (ctx) => {
-    if (!isAuthorized(ctx)) return;
-
-    try {
-      startTypingIndicator(ctx.chat.id);
-
-      const tasksPrompt = `Read TASKS.md and provide a concise summary for Telegram.
-Include: priority tasks, ongoing items, blocked tasks.
-Format it nicely for mobile reading.`;
-
-      const queueId = await triggerAgentRun({
-        type: 'chat',
-        channel: 'telegram',
-        prompt: tasksPrompt,
-      });
-
-      if (!queueId) {
-        stopTypingIndicator(String(ctx.chat.id));
-        await ctx.reply('Agent run already pending');
-      }
-    } catch (error) {
-      stopTypingIndicator(String(ctx.chat.id));
-      await ctx.reply('Failed to get tasks: ' + error);
-    }
-  });
-
   bot.command('settings', async (ctx) => {
     if (!isAuthorized(ctx)) return;
 
@@ -207,9 +181,9 @@ Format it nicely for mobile reading.`;
       // Start typing indicator while agent processes
       startTypingIndicator(ctx.chat.id);
 
-      // Trigger agent with telegram channel context and vector search
+      // Notify worker that message arrived - it will poll for unprocessed messages
       // Agent response will be auto-extracted and sent when run completes
-      await triggerAgentRun({ channel: 'telegram', type: 'chat', query: text });
+      queueWorker.notifyMessageArrived('telegram');
     } catch (error) {
       await ctx.reply('Failed to send message: ' + error);
     }
@@ -249,7 +223,9 @@ Format it nicely for mobile reading.`;
       // Then process as regular chat message
       const message = await saveHumanMessage(transcription, 'telegram');
       wsManager.broadcastChatMessage(message);
-      await triggerAgentRun({ channel: 'telegram', type: 'chat', query: transcription });
+
+      // Notify worker that message arrived
+      queueWorker.notifyMessageArrived('telegram');
     } catch (error) {
       console.error('Voice message error:', error);
       await ctx.reply('Failed to process voice message: ' + (error instanceof Error ? error.message : String(error)));
@@ -277,7 +253,7 @@ function isAuthorized(ctx: Context): boolean {
   return String(ctx.chat?.id) === authorizedChatId;
 }
 
-function startTypingIndicator(chatId: string | number): void {
+export function startTypingIndicator(chatId: string | number): void {
   const id = String(chatId);
   // Clear any existing interval
   stopTypingIndicator(id);
@@ -419,7 +395,6 @@ async function registerBotCommands(): Promise<void> {
   try {
     await bot.api.setMyCommands([
       { command: 'status', description: 'Show agent status' },
-      { command: 'tasks', description: 'List current tasks' },
       { command: 'history', description: 'Recent conversation' },
       { command: 'run', description: 'Trigger agent run' },
       { command: 'settings', description: 'Output settings' },

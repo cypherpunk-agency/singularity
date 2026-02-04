@@ -34,7 +34,7 @@ RUN useradd -m -s /bin/bash agent
 # Create app directory structure
 RUN mkdir -p /app/agent/memory \
     /app/agent/conversation \
-    /app/agent/config \
+    /app/agent/context \
     /app/scripts \
     /app/logs/agent-output \
     /app/state \
@@ -45,9 +45,9 @@ RUN mkdir -p /app/agent/memory \
 COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
-# Copy config files (agent can modify these now)
-COPY agent/config/ /app/agent/config/
-RUN chown -R agent:agent /app/agent/config
+# Copy context files (agent can modify these now)
+COPY agent/context/ /app/agent/context/
+RUN chown -R agent:agent /app/agent/context
 
 # Copy crontab
 COPY docker/crontab /etc/cron.d/agent-cron

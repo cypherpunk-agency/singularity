@@ -1,6 +1,7 @@
 - read @README.md
-- read @agent/config/SOUL.md
-- read @agent/config/SYSTEM.md
+- read @agent/context/SOUL.md
+- read @agent/context/SYSTEM.md
+- read @agent/context/OPERATIONS.md
 - the repo is also mounted in the container,
   - develop locally
   - build in the container (local builds won't be served - the container serves its own dist/)

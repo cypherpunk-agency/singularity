@@ -2,7 +2,7 @@
 export const PATHS = {
   // Agent files
   AGENT_DIR: '/app/agent',
-  HEARTBEAT_FILE: '/app/agent/config/HEARTBEAT.md',
+  HEARTBEAT_FILE: '/app/agent/context/HEARTBEAT.md',
   PROJECTS_FILE: '/app/agent/PROJECTS.md',
   MEMORY_FILE: '/app/agent/MEMORY.md',
   // INBOX_FILE removed - messages now go directly to conversation channels

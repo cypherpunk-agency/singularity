@@ -15,7 +15,7 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="/app"
-CONFIG_DIR="${APP_DIR}/agent/config"
+CONFIG_DIR="${APP_DIR}/agent/context"
 AGENT_DIR="${APP_DIR}/agent"
 STATE_DIR="${APP_DIR}/state"
 LOGS_DIR="${APP_DIR}/logs"

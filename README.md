@@ -95,7 +95,7 @@ cat logs/heartbeat.log
 agent/
 ├── PROJECTS.md       # Project directory (~200 lines)
 ├── MEMORY.md         # Long-term curated memory (cross-session)
-├── config/           # Agent configuration (mutable)
+├── context/          # Agent context files (mutable)
 │   ├── SOUL.md       # Core identity (all contexts)
 │   ├── CONVERSATION.md # Chat-specific instructions
 │   ├── TELEGRAM.md   # Telegram-specific instructions (optional)

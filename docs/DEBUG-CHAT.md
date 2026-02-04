@@ -104,13 +104,31 @@ curl -s http://localhost:3001/api/debug/conversations/web | jq
 curl -s http://localhost:3001/api/debug/conversations/telegram | jq
 ```
 
+## Check Unprocessed Messages
+
+Chat runs use a message-centric model - messages without `processedAt` are pending:
+
+```bash
+# View unprocessed web messages (human messages without processedAt)
+docker exec singularity-agent bash -c "cat /app/agent/conversation/web/$(date +%Y-%m-%d).jsonl 2>/dev/null | jq -c 'select(.from==\"human\" and .processedAt == null)'"
+
+# Count unprocessed messages
+docker exec singularity-agent bash -c "cat /app/agent/conversation/*/$(date +%Y-%m-%d).jsonl 2>/dev/null | jq -s '[.[] | select(.from==\"human\" and .processedAt == null)] | length'"
+
+# Check if worker is processing (look for recent QueueWorker logs)
+docker logs singularity-agent 2>&1 | grep "QueueWorker" | tail -10
+```
+
 ## Verify Compiled Code
 
 ```bash
-# Check if source changes are compiled
-docker exec singularity-agent bash -c "grep -n 'triggerAgentRun' /app/packages/control-plane/dist/api/chat.js"
+# Check if source changes are compiled - should use notifyMessageArrived for chat
+docker exec singularity-agent bash -c "grep -n 'notifyMessageArrived' /app/packages/control-plane/dist/api/chat.js"
 
-# Check utils
+# Check worker has message-centric methods
+docker exec singularity-agent bash -c "grep -n 'checkForUnprocessedMessages\|executeChatRun\|notifyMessageArrived' /app/packages/control-plane/dist/queue/worker.js"
+
+# Check utils (triggerAgentRun should notify worker for chat, queue for cron)
 docker exec singularity-agent bash -c "cat /app/packages/control-plane/dist/utils/agent.js"
 ```
 
@@ -133,12 +151,15 @@ docker-compose -f docker/docker-compose.yml up -d agent
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | Message doesn't appear in UI | WebSocket stale closure | Check `useWebSocket.ts` uses ref pattern |
-| Agent not triggered | Control plane not calling `triggerAgentRun` | Check `chat.ts` imports and calls it |
+| Agent not triggered | Worker not notified | Check `notifyMessageArrived` is called |
+| Messages pile up unprocessed | Worker stuck or crashed | Check `docker logs` for errors, restart |
+| Multiple rapid messages, only one run | Expected behavior | Messages are batched - this is correct |
 | Exit code 4, 0 cost | Agent script failing early | Check file ownership, user permissions |
 | Files owned by root | Control plane running as root | Check `entrypoint.sh` runs node as agent user |
 | "No result received" | Claude CLI not producing output | Check HOME env var set to `/home/agent` |
 | Agent works manually but not triggered | Environment difference | Compare env vars, check spawn options |
 | Conversation not saved | Wrong channel directory | Check per-channel directories exist |
+| Messages stuck without processedAt | Run failed mid-way | Check logs, messages retry on next run |
 
 ## Key Files
 
@@ -149,6 +170,6 @@ docker-compose -f docker/docker-compose.yml up -d agent
 - `/app/logs/agent-input/` - Full context sent to Claude (for debugging)
 - `/app/agent/conversation/web/` - Web chat messages
 - `/app/agent/conversation/telegram/` - Telegram chat messages
-- `/app/agent/config/CONVERSATION.md` - Chat mode system prompt
-- `/app/agent/config/HEARTBEAT.md` - Cron mode system prompt + heartbeat tasks
-- `/app/agent/config/SOUL.md` - Core identity (used in all modes)
+- `/app/agent/context/CONVERSATION.md` - Chat mode system prompt
+- `/app/agent/context/HEARTBEAT.md` - Cron mode system prompt + heartbeat tasks
+- `/app/agent/context/SOUL.md` - Core identity (used in all modes)

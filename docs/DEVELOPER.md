@@ -33,9 +33,9 @@
 | `packages/shared/src/constants.ts` | Paths, WS events, API routes |
 | `packages/shared/src/types.ts` | Shared types (Channel, RunType, Message, etc.) |
 | `scripts/run-agent.sh` | Claude CLI invocation, context assembly |
-| `agent/config/SOUL.md` | Core identity (all contexts) |
-| `agent/config/CONVERSATION.md` | Chat-specific system prompt |
-| `agent/config/HEARTBEAT.md` | Cron-specific system prompt + heartbeat tasks |
+| `agent/context/SOUL.md` | Core identity (all contexts) |
+| `agent/context/CONVERSATION.md` | Chat-specific system prompt |
+| `agent/context/HEARTBEAT.md` | Cron-specific system prompt + heartbeat tasks |
 
 ## Session Architecture
 
@@ -44,7 +44,7 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Shared Cross-Session Context                 │
-│    agent/config/SOUL.md, agent/MEMORY.md, agent/TASKS.md        │
+│    agent/context/SOUL.md, agent/MEMORY.md, agent/TASKS.md        │
 └─────────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -115,57 +115,67 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 
 ## Data Flow
 
-### Queue-Based Run System
+### Message-Centric Run System
 
-All agent runs go through a queue to prevent concurrent execution:
+The system uses a **message-centric model** for chat runs:
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Chat API   │────►│             │     │             │────►│  run-agent  │
-│  Telegram   │     │    Queue    │────►│   Worker    │     │    .sh      │
-│  Cron       │────►│  (JSONL)    │     │             │────►│  Claude CLI │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-                    state/queue.jsonl    Sequential          Bash process
-                    Sorted by priority   processing
+│  Chat API   │────►│ Conversation│     │             │────►│  run-agent  │
+│  Telegram   │     │   JSONL     │────►│   Worker    │     │    .sh      │
+└─────────────┘     │ (messages)  │     │   polls     │────►│  Claude CLI │
+                    └─────────────┘     │ unprocessed │     └─────────────┘
+┌─────────────┐     ┌─────────────┐     │  messages   │
+│  Cron       │────►│    Queue    │────►│             │
+└─────────────┘     │   JSONL     │     └─────────────┘
+                    └─────────────┘
+                    state/queue.jsonl
 ```
 
-**Priority**: Chat runs (priority=1) process before cron runs (priority=2).
+**Chat runs**: Messages saved to JSONL ARE the queue. Worker polls for unprocessed messages.
+**Cron runs**: Traditional queue system with `state/queue.jsonl`.
+**Priority**: Messages (chat) always processed before queued cron runs.
 
-### Chat Message Flow
+### Chat Message Flow (Message-Centric)
 
 1. Human sends message via UI/Telegram
-2. `POST /api/chat` saves to `agent/conversation/{channel}/YYYY-MM-DD.jsonl`
-3. Run enqueued with `type=chat`, `channel={channel}`, `priority=1`
-4. Queue worker picks up run (after any current run completes)
-5. Worker prepares context and spawns `run-agent.sh`
-6. Claude CLI runs with `--dangerously-skip-permissions`
-7. Agent calls `curl -X POST /api/chat/respond` to send response
-8. Response saved to channel conversation, broadcast via WebSocket
-9. If telegram channel, also sent to Telegram
-10. Worker marks run as completed, checks for next
+2. `POST /api/chat` saves to `agent/conversation/{channel}/YYYY-MM-DD.jsonl` (no `processedAt`)
+3. Worker notified via `notifyMessageArrived(channel)`
+4. Worker polls `checkForUnprocessedMessages()` - checks telegram first, then web
+5. Multiple rapid messages are batched into ONE run (no duplicates)
+6. Worker spawns `run-agent.sh` with `--type chat --channel {channel}`
+7. Claude CLI runs with `--dangerously-skip-permissions`
+8. Agent calls `curl -X POST /api/chat/respond` to send response
+9. Response saved to channel conversation, broadcast via WebSocket
+10. If telegram channel, also sent to Telegram
+11. Worker marks messages as processed (`processedAt` timestamp added to JSONL)
+12. Worker checks for more unprocessed messages or queued cron runs
 
-### Cron (Heartbeat) Flow
+### Cron (Heartbeat) Flow (Queue-Based)
 
 1. Cron calls `POST /api/queue/enqueue` with `type=cron`
-2. Run enqueued with `priority=2`
-3. Queue worker picks up run (chat runs take precedence)
-4. Worker prepares context and spawns `run-agent.sh`
-5. Claude CLI runs with `--dangerously-skip-permissions`
-6. Agent manages tasks, updates MEMORY.md, etc.
-7. Worker marks run as completed
+2. Run enqueued in `state/queue.jsonl` with `priority=2`
+3. Worker checks for unprocessed chat messages first (always prioritized)
+4. If no messages, worker dequeues cron run
+5. Worker prepares context and spawns `run-agent.sh`
+6. Claude CLI runs with `--dangerously-skip-permissions`
+7. Agent manages tasks, updates MEMORY.md, etc.
+8. Worker marks run as completed in queue
 
 ## Key Patterns
 
 - **Per-channel conversations**: `conversation.ts` - separate directories for web/telegram
 - **Path security**: `api/files.ts` - normalize + startsWith check
 - **TASKS.md protected**: `api/files.ts` - write blocked
-- **Queue-based serialization**: `queue/worker.ts` - sequential run processing
-- **Priority ordering**: Chat (1) before cron (2), FIFO within same priority
+- **Message-centric chat runs**: `queue/worker.ts` - polls for unprocessed messages, batches into ONE run
+- **Queue-based cron runs**: `queue/worker.ts` - cron runs use traditional queue
+- **Message priority**: Chat messages always processed before queued cron runs
 - **ID sanitization**: `api/outputs.ts` - path.basename + regex
 - **File cache dedup**: `watcher/files.ts` - skip unchanged content
 - **Viewable files whitelist**: `api/files.ts`
 - **Run history append-only**: `state/run-history.jsonl` - JSONL format
-- **Queue persistence**: `state/queue.jsonl` - JSONL with cleanup
+- **Queue persistence**: `state/queue.jsonl` - JSONL with cleanup (cron only)
+- **Message tracking**: `conversation/*.jsonl` - `processedAt` field marks processed messages
 - **Input logging**: `logs/agent-input/` - full context sent to Claude for debugging
 - **Internal API proxy**: `api/proxy.ts` - forward requests to internal services through control plane
 

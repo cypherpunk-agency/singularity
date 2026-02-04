@@ -22,6 +22,8 @@ services:
       - VECTOR_SERVICE_URL=http://vector:5000
       # Transcription service (for voice messages)
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5001
+      # TTS service (for voice responses)
+      - TTS_SERVICE_URL=http://tts:8880
       # Telegram (optional) - loaded from env_file
 
     ports:
@@ -40,8 +42,8 @@ services:
       # State persistence (session, vector DB, history)
       - ../state:/app/state
 
-      # Config files (SOUL.md, CONVERSATION.md, HEARTBEAT.md - now under agent/)
-      - ../agent/config:/app/agent/config
+      # Context files (SOUL.md, CONVERSATION.md, HEARTBEAT.md - now under agent/)
+      - ../agent/context:/app/agent/context
 
       # Claude CLI session data
       - claude-data:/home/agent/.claude
@@ -118,6 +120,29 @@ services:
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  tts:
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:latest
+    container_name: singularity-tts
+    restart: unless-stopped
+
+    environment:
+      - DEFAULT_VOICE=af_bella
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
       interval: 30s
       timeout: 10s
       retries: 3

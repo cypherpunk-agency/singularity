@@ -133,7 +133,7 @@ async function processNewConversationEntries(
   filePath: string,
   oldContent: string,
   newContent: string,
-  wsManager: WSManager
+  _wsManager: WSManager
 ): Promise<void> {
   const oldLines = new Set(oldContent.trim().split('\n').filter(l => l.trim()));
   const newLines = newContent.trim().split('\n').filter(l => l.trim());
@@ -143,12 +143,8 @@ async function processNewConversationEntries(
     if (!oldLines.has(line)) {
       try {
         const message = JSON.parse(line) as Message;
-        // Ensure channel is set correctly
-        if (channel && message.channel !== channel) {
-          message.channel = channel;
-        }
-        wsManager.broadcastChatMessage(message);
-        console.log(`New ${message.from} message in ${channel} channel`);
+        // Just log - broadcasting is handled by chat.ts and extractor.ts
+        console.log(`[watcher] Detected new ${message.from} message in ${channel} channel (already broadcast by API)`);
       } catch {
         // Invalid line, skip
       }
@@ -180,26 +176,8 @@ async function processRunHistoryChange(
       );
       console.log(`Agent run completed: ${runId || 'unknown'} (${entry.type}${entry.channel ? ':' + entry.channel : ''})`);
 
-      // Extract and route response for successful chat runs
-      if (entry.type === 'chat' && entry.channel && entry.exit_code === 0) {
-        // Small delay to ensure output file is fully written
-        setTimeout(async () => {
-          try {
-            const { extractAndRouteResponse } = await import('../response/extractor.js');
-            await extractAndRouteResponse({
-              runId: entry.runId,
-              type: entry.type,
-              channel: entry.channel,
-              exit_code: entry.exit_code,
-              outputFile: entry.outputFile,
-              duration_seconds: entry.duration_seconds,
-              cost_usd: entry.cost_usd,
-            }, wsManager);
-          } catch (error) {
-            console.error('[watcher] Failed to extract and route response:', error);
-          }
-        }, 200);
-      }
+      // Note: extractAndRouteResponse is called by queue worker, not here
+      // This avoids duplicate message broadcasts
 
       // Check for unprocessed messages and re-trigger if any exist
       // Small delay to ensure lock is released

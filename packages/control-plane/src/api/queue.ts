@@ -46,11 +46,13 @@ export async function registerQueueRoutes(fastify: FastifyInstance) {
   }>('/api/queue/status', async () => {
     const pending = await queueManager.getPending();
     const processing = await queueManager.getProcessing();
+    const processingRuns = await queueManager.getProcessingRuns();
     const recentCompleted = await queueManager.getRecentCompleted(5);
 
     return {
       pendingCount: pending.length,
-      processingRun: processing,
+      processingRun: processing,  // Backward compat
+      processingRuns,
       recentCompleted,
     };
   });

@@ -34,9 +34,10 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
       // No history file
     }
 
-    // Check if agent is currently running via queue
-    const processingRun = await queueManager.getProcessing();
-    const status: 'idle' | 'running' | 'error' = processingRun ? 'running' : 'idle';
+    // Check if agent is currently running via queue (any channel)
+    const processingRuns = await queueManager.getProcessingRuns();
+    const isRunning = processingRuns.web || processingRuns.telegram || processingRuns.cron;
+    const status: 'idle' | 'running' | 'error' = isRunning ? 'running' : 'idle';
 
     // Calculate next scheduled run (next hour)
     const now = new Date();
@@ -107,17 +108,19 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     const restartFile = path.join(stateDir, 'restart-requested');
 
     try {
-      // Check if an agent run is currently processing
-      const processing = await queueManager.getProcessing();
+      // Check if any agent runs are currently processing
+      const processingRuns = await queueManager.getProcessingRuns();
+      const activeRuns = [processingRuns.web, processingRuns.telegram, processingRuns.cron].filter(Boolean);
 
-      if (processing) {
-        // Queue the restart to happen after current run completes
+      if (activeRuns.length > 0) {
+        // Queue the restart to happen after all current runs complete
         queueManager.setPendingRestart(true);
-        fastify.log.info('[Agent API] Restart queued, waiting for run %s to complete', processing.id);
+        const runIds = activeRuns.map(r => r!.id.slice(0, 8)).join(', ');
+        fastify.log.info('[Agent API] Restart queued, waiting for %d run(s) to complete: %s', activeRuns.length, runIds);
 
         return {
           status: 'restart_queued',
-          message: 'Restart will occur after current agent run completes.',
+          message: `Restart will occur after ${activeRuns.length} active run(s) complete.`,
         };
       }
 

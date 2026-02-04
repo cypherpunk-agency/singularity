@@ -4,6 +4,9 @@ export type Channel = 'web' | 'telegram';
 // Run type for agent context
 export type RunType = 'chat' | 'cron';
 
+// Lock type for per-channel queue processing
+export type LockType = Channel | 'cron';
+
 // Message metadata for agent responses
 export interface MessageMetadata {
   runId?: string;      // Link to session for detailed view
@@ -222,9 +225,16 @@ export interface EnqueueResponse {
   position?: number;
 }
 
+export interface ProcessingRuns {
+  web: QueuedRun | null;
+  telegram: QueuedRun | null;
+  cron: QueuedRun | null;
+}
+
 export interface QueueStatusResponse {
   pendingCount: number;
-  processingRun: QueuedRun | null;
+  processingRun: QueuedRun | null;  // Backward compat: first processing run
+  processingRuns: ProcessingRuns;   // Per-channel processing status
   recentCompleted: QueuedRun[];
 }
 

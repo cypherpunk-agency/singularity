@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { QueuedRun, Channel, Message } from '@singularity/shared';
+import { QueuedRun, Channel, Message, LockType } from '@singularity/shared';
 import { queueManager } from './manager.js';
 import { prepareContext } from '../context/index.js';
 import { getUnprocessedMessages, markMessagesAsProcessed } from '../conversation.js';
@@ -116,14 +116,19 @@ async function writeRestartFile(): Promise<void> {
 }
 
 /**
- * Queue worker that processes runs sequentially.
+ * Queue worker that processes runs with per-channel locks.
+ * Web and telegram channels can run concurrently, cron runs independently.
  */
 export class QueueWorker {
-  private processing: boolean = false;
+  private processingLocks: Map<LockType, boolean> = new Map([
+    ['web', false],
+    ['telegram', false],
+    ['cron', false],
+  ]);
+  private currentProcesses: Map<LockType, ChildProcess> = new Map();
   private wsManager: WSManager | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
   private healthInterval: NodeJS.Timeout | null = null;
-  private currentProcess: ChildProcess | null = null;
 
   /**
    * Set the WebSocket manager for broadcasting events.
@@ -159,10 +164,12 @@ export class QueueWorker {
    * Recover stuck jobs from previous runs (e.g., after container restart).
    */
   private async recoverStuckJobs(): Promise<void> {
-    const processing = await queueManager.getProcessing();
-    if (processing) {
-      console.log(`[QueueWorker] Recovering stuck job from previous run: ${processing.id}`);
-      await queueManager.markFailed(processing.id, 'Server restart: job was interrupted');
+    const processingRuns = await queueManager.getProcessingRuns();
+    for (const [lockType, run] of Object.entries(processingRuns)) {
+      if (run) {
+        console.log(`[QueueWorker] Recovering stuck job from previous run (${lockType}): ${run.id}`);
+        await queueManager.markFailed(run.id, 'Server restart: job was interrupted');
+      }
     }
   }
 
@@ -170,28 +177,32 @@ export class QueueWorker {
    * Health check that detects and recovers from stuck jobs.
    */
   private async checkForStuckJobs(): Promise<void> {
-    const processing = await queueManager.getProcessing();
-    if (!processing?.startedAt) return;
+    const processingRuns = await queueManager.getProcessingRuns();
 
-    const elapsedMs = Date.now() - new Date(processing.startedAt).getTime();
-    if (elapsedMs > STUCK_THRESHOLD_MS) {
-      console.error(`[QueueWorker] Detected stuck job: ${processing.id} (${Math.round(elapsedMs / 1000)}s elapsed)`);
+    for (const [lockType, run] of Object.entries(processingRuns) as [LockType, QueuedRun | null][]) {
+      if (!run?.startedAt) continue;
 
-      // Kill the process if it's still running
-      if (this.currentProcess && !this.currentProcess.killed) {
-        console.log('[QueueWorker] Killing stuck process');
-        this.currentProcess.kill('SIGTERM');
-        setTimeout(() => {
-          if (this.currentProcess && !this.currentProcess.killed) {
-            this.currentProcess.kill('SIGKILL');
-          }
-        }, 5000);
+      const elapsedMs = Date.now() - new Date(run.startedAt).getTime();
+      if (elapsedMs > STUCK_THRESHOLD_MS) {
+        console.error(`[QueueWorker] Detected stuck job (${lockType}): ${run.id} (${Math.round(elapsedMs / 1000)}s elapsed)`);
+
+        // Kill the process if it's still running
+        const proc = this.currentProcesses.get(lockType);
+        if (proc && !proc.killed) {
+          console.log(`[QueueWorker] Killing stuck process for ${lockType}`);
+          proc.kill('SIGTERM');
+          setTimeout(() => {
+            if (!proc.killed) {
+              proc.kill('SIGKILL');
+            }
+          }, 5000);
+        }
+
+        await queueManager.markFailed(run.id, `Timeout: exceeded ${Math.round(STUCK_THRESHOLD_MS / 1000)}s`);
+        this.processingLocks.set(lockType, false);
+        this.currentProcesses.delete(lockType);
+        setImmediate(() => this.processNext());
       }
-
-      await queueManager.markFailed(processing.id, `Timeout: exceeded ${Math.round(STUCK_THRESHOLD_MS / 1000)}s`);
-      this.processing = false;
-      this.currentProcess = null;
-      setImmediate(() => this.processNext());
     }
   }
 
@@ -227,72 +238,100 @@ export class QueueWorker {
   }
 
   /**
-   * Check for unprocessed messages across channels.
-   * Returns the first channel with unprocessed messages, prioritizing telegram over web.
+   * Check if the worker is currently processing any run.
    */
-  private async checkForUnprocessedMessages(): Promise<{ channel: Channel; messages: Message[] } | null> {
-    // Check telegram first (mobile messages), then web
-    for (const channel of ['telegram', 'web'] as Channel[]) {
-      const unprocessed = await getUnprocessedMessages(channel);
-      if (unprocessed.length > 0) {
-        return { channel, messages: unprocessed };
-      }
+  isProcessing(): boolean {
+    for (const isLocked of this.processingLocks.values()) {
+      if (isLocked) return true;
     }
-    return null;
+    return false;
   }
 
   /**
-   * Check if the worker is currently processing a run.
+   * Check if a specific channel/lock type is currently processing.
    */
-  isProcessing(): boolean {
-    return this.processing;
+  isProcessingChannel(lockType: LockType): boolean {
+    return this.processingLocks.get(lockType) ?? false;
   }
 
   /**
    * Process the next run in the queue.
-   * Checks for unprocessed messages first (chat runs), then falls back to queue (cron runs).
+   * Uses per-channel locks to allow concurrent processing of web, telegram, and cron.
    */
   async processNext(): Promise<void> {
-    if (this.processing) {
+    // Try to process each channel/type concurrently
+    const promises: Promise<void>[] = [];
+
+    // Try chat channels (web, telegram)
+    for (const channel of ['telegram', 'web'] as Channel[]) {
+      promises.push(this.tryProcessChannel(channel));
+    }
+
+    // Try cron runs
+    promises.push(this.tryProcessCron());
+
+    await Promise.all(promises);
+  }
+
+  /**
+   * Try to process pending messages for a specific channel.
+   */
+  private async tryProcessChannel(channel: Channel): Promise<void> {
+    // Check if this channel is already processing
+    if (this.processingLocks.get(channel)) {
       return;
     }
 
-    // Check for unprocessed messages first (message-centric model)
-    const pendingMessages = await this.checkForUnprocessedMessages();
-    if (pendingMessages) {
-      this.processing = true;
-      try {
-        console.log(`[QueueWorker] Processing ${pendingMessages.messages.length} unprocessed messages from ${pendingMessages.channel}`);
-        await this.executeChatRun(pendingMessages.channel, pendingMessages.messages);
-      } catch (error: any) {
-        console.error(`[QueueWorker] Chat run failed: ${error.message}`);
-        // Don't mark messages as processed if run failed - they'll be retried
-      } finally {
-        this.processing = false;
-        // Check for more work (more messages or queue items)
-        setImmediate(() => this.processNext());
-      }
+    // Check for unprocessed messages
+    const unprocessed = await getUnprocessedMessages(channel);
+    if (unprocessed.length === 0) {
       return;
     }
 
-    // Then check queue for cron runs (existing logic)
+    // Acquire lock
+    this.processingLocks.set(channel, true);
+
+    try {
+      console.log(`[QueueWorker] Processing ${unprocessed.length} unprocessed messages from ${channel}`);
+      await this.executeChatRun(channel, unprocessed);
+    } catch (error: any) {
+      console.error(`[QueueWorker] Chat run failed for ${channel}: ${error.message}`);
+      // Don't mark messages as processed if run failed - they'll be retried
+    } finally {
+      this.processingLocks.set(channel, false);
+      // Check for more work on this channel
+      setImmediate(() => this.tryProcessChannel(channel));
+    }
+  }
+
+  /**
+   * Try to process the next cron run from the queue.
+   */
+  private async tryProcessCron(): Promise<void> {
+    // Check if cron is already processing
+    if (this.processingLocks.get('cron')) {
+      return;
+    }
+
+    // Dequeue next cron run
     const next = await queueManager.dequeue();
     if (!next) {
       return;
     }
 
-    this.processing = true;
+    // Acquire lock
+    this.processingLocks.set('cron', true);
 
     try {
       await this.executeRun(next);
       await queueManager.markCompleted(next.id);
     } catch (error: any) {
-      console.error(`[QueueWorker] Run failed: ${error.message}`);
+      console.error(`[QueueWorker] Cron run failed: ${error.message}`);
       await queueManager.markFailed(next.id, error.message || 'Unknown error');
     } finally {
-      this.processing = false;
-      // Check for more work
-      setImmediate(() => this.processNext());
+      this.processingLocks.set('cron', false);
+      // Check for more cron work
+      setImmediate(() => this.tryProcessCron());
     }
   }
 
@@ -376,7 +415,7 @@ export class QueueWorker {
       });
 
       // Track process for health check to kill if stuck
-      this.currentProcess = proc;
+      this.currentProcesses.set(channel, proc);
 
       let stdout = '';
       let stderr = '';
@@ -408,7 +447,7 @@ export class QueueWorker {
       proc.on('close', async (code) => {
         completed = true;
         if (timeoutHandle) clearTimeout(timeoutHandle);
-        this.currentProcess = null;
+        this.currentProcesses.delete(channel);
 
         if (code !== 0) {
           console.error(`[QueueWorker] Agent failed with code ${code}: runId=${runId}`);
@@ -434,7 +473,7 @@ export class QueueWorker {
       proc.on('error', (error) => {
         completed = true;
         if (timeoutHandle) clearTimeout(timeoutHandle);
-        this.currentProcess = null;
+        this.currentProcesses.delete(channel);
         console.error(`[QueueWorker] Failed to spawn agent: ${error.message}`);
         reject(error);
       });
@@ -539,6 +578,9 @@ export class QueueWorker {
       this.wsManager.broadcastAgentStarted(sessionId, runId, channel);
     }
 
+    // Determine lock type for this run
+    const lockType: LockType = type === 'cron' ? 'cron' : (channel || 'web');
+
     // Execute the script and wait for completion with timeout
     await new Promise<void>((resolve, reject) => {
       console.log(`[QueueWorker] Spawning agent: runId=${runId}, type=${type}, channel=${channel || 'N/A'}, timeout=${AGENT_TIMEOUT_MS}ms`);
@@ -550,7 +592,7 @@ export class QueueWorker {
       });
 
       // Track process for health check to kill if stuck
-      this.currentProcess = proc;
+      this.currentProcesses.set(lockType, proc);
 
       let stdout = '';
       let stderr = '';
@@ -582,7 +624,7 @@ export class QueueWorker {
       proc.on('close', async (code) => {
         completed = true;
         if (timeoutHandle) clearTimeout(timeoutHandle);
-        this.currentProcess = null;
+        this.currentProcesses.delete(lockType);
 
         if (code !== 0) {
           console.error(`[QueueWorker] Agent failed with code ${code}: runId=${runId}`);
@@ -608,7 +650,7 @@ export class QueueWorker {
       proc.on('error', (error) => {
         completed = true;
         if (timeoutHandle) clearTimeout(timeoutHandle);
-        this.currentProcess = null;
+        this.currentProcesses.delete(lockType);
         console.error(`[QueueWorker] Failed to spawn agent: ${error.message}`);
         reject(error);
       });

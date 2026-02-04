@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { QueuedRun, RunType, Channel } from '@singularity/shared';
+import { QueuedRun, RunType, Channel, ProcessingRuns } from '@singularity/shared';
 import { readQueue, appendToQueue, updateQueueEntry, cleanupQueue } from './storage.js';
 
 export interface EnqueueOptions {
@@ -150,10 +150,37 @@ export class QueueManager {
 
   /**
    * Get the currently processing run (if any).
+   * For backward compatibility, returns the first processing run found.
    */
   async getProcessing(): Promise<QueuedRun | null> {
     const entries = await readQueue();
     return entries.find(e => e.status === 'processing') || null;
+  }
+
+  /**
+   * Get all currently processing runs grouped by lock type.
+   */
+  async getProcessingRuns(): Promise<ProcessingRuns> {
+    const entries = await readQueue();
+    const processing = entries.filter(e => e.status === 'processing');
+
+    const result: ProcessingRuns = {
+      web: null,
+      telegram: null,
+      cron: null,
+    };
+
+    for (const run of processing) {
+      if (run.type === 'cron') {
+        result.cron = run;
+      } else if (run.channel === 'web') {
+        result.web = run;
+      } else if (run.channel === 'telegram') {
+        result.telegram = run;
+      }
+    }
+
+    return result;
   }
 
   /**

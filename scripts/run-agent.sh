@@ -102,41 +102,68 @@ log_kv() {
 build_system_prompt() {
     local prompt=""
 
-    # Always include SOUL.md
+    # 1. SOUL.md (always)
     if [ -f "$SOUL_FILE" ]; then
         prompt=$(cat "$SOUL_FILE")
     fi
 
-    # Always include SYSTEM.md (system overview) - before TOOLS
+    # 2. SYSTEM.md (always)
     if [ -f "${CONFIG_DIR}/SYSTEM.md" ]; then
         prompt="${prompt}
 
 $(cat "${CONFIG_DIR}/SYSTEM.md")"
     fi
 
-    # Always include TOOLS.md (agent tools documentation)
-    if [ -f "${CONFIG_DIR}/TOOLS.md" ]; then
+    # 3. OPERATIONS.md (always)
+    if [ -f "${CONFIG_DIR}/OPERATIONS.md" ]; then
         prompt="${prompt}
 
-$(cat "${CONFIG_DIR}/TOOLS.md")"
+$(cat "${CONFIG_DIR}/OPERATIONS.md")"
     fi
 
+    # 4. PROJECTS.md (always)
+    if [ -f "${AGENT_DIR}/PROJECTS.md" ]; then
+        prompt="${prompt}
+
+## Projects Directory
+$(cat "${AGENT_DIR}/PROJECTS.md")"
+    fi
+
+    # 5. MEMORY.md (always)
+    if [ -f "${AGENT_DIR}/MEMORY.md" ]; then
+        prompt="${prompt}
+
+## Cross-Session Memory
+$(cat "${AGENT_DIR}/MEMORY.md")"
+    fi
+
+    # 6. Mode-specific instructions
     if [[ "$TYPE" == "cron" ]]; then
-        # Cron mode: SOUL + HEARTBEAT
+        # Cron mode: HEARTBEAT.md
         if [ -f "$HEARTBEAT_FILE" ]; then
             prompt="${prompt}
 
 $(cat "$HEARTBEAT_FILE")"
         fi
     else
-        # Chat mode: SOUL + CONVERSATION + conversation history
+        # Chat mode: CONVERSATION.md
         if [ -f "$CONVERSATION_FILE" ]; then
             prompt="${prompt}
 
 $(cat "$CONVERSATION_FILE")"
         fi
 
-        # Include channel-specific conversation history
+        # 7. Channel-specific instructions (e.g., TELEGRAM.md, WEB.md)
+        if [[ -n "$CHANNEL" ]]; then
+            local channel_config="${CONFIG_DIR}/${CHANNEL^^}.md"
+            if [ -f "$channel_config" ]; then
+                prompt="${prompt}
+
+$(cat "$channel_config")"
+            fi
+        fi
+
+        # 8. Conversation history
         if [[ -n "$CHANNEL" ]]; then
             local conv_dir="${AGENT_DIR}/conversation/${CHANNEL}"
             local today=$(date +%Y-%m-%d)
@@ -174,21 +201,6 @@ No previous messages in this conversation."
 
 **Channel:** ${CHANNEL}"
         fi
-    fi
-
-    # Always include cross-session memory
-    if [ -f "${AGENT_DIR}/MEMORY.md" ]; then
-        prompt="${prompt}
-
-## Cross-Session Memory
-$(cat "${AGENT_DIR}/MEMORY.md")"
-    fi
-
-    if [ -f "${AGENT_DIR}/TASKS.md" ]; then
-        prompt="${prompt}
-
-## Current Tasks
-$(cat "${AGENT_DIR}/TASKS.md")"
     fi
 
     echo "$prompt"

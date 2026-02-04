@@ -174,7 +174,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul = soulTokens;
   }
 
-  // 1b. SYSTEM.md (always included after SOUL)
+  // 2. SYSTEM.md (always included)
   const system = await readFileSafe(path.join(basePath, 'agent', 'context', 'SYSTEM.md'));
   if (system) {
     parts.push(system);
@@ -183,66 +183,29 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul += systemTokens; // Count with soul
   }
 
-  // 2. Mode-specific instructions
-  if (type === 'cron') {
-    const heartbeat = await readFileSafe(path.join(basePath, 'agent', 'context', 'HEARTBEAT.md'));
-    if (heartbeat) {
-      parts.push(heartbeat);
-      const tokens = estimateTokens(heartbeat);
-      usedTokens += tokens;
-      metadata.components.modeInstructions = tokens;
-    }
-  } else {
-    const conversation = await readFileSafe(path.join(basePath, 'agent', 'context', 'CONVERSATION.md'));
-    if (conversation) {
-      parts.push(conversation);
-      const tokens = estimateTokens(conversation);
-      usedTokens += tokens;
-      metadata.components.modeInstructions = tokens;
-    }
-
-    // 2b. Channel-specific instructions (e.g., TELEGRAM.md, WEB.md)
-    if (channel) {
-      const channelConfig = await readFileSafe(
-        path.join(basePath, 'agent', 'context', `${channel.toUpperCase()}.md`)
-      );
-      if (channelConfig) {
-        parts.push(channelConfig);
-        const tokens = estimateTokens(channelConfig);
-        usedTokens += tokens;
-        metadata.components.modeInstructions += tokens;
-      }
-    }
-
-    // 3. Conversation history (with cross-day support)
-    if (channel) {
-      const remainingBudget = tokenBudget - usedTokens - 2500; // Reserve for memory + projects
-      const history = await getConversationHistoryForContext(channel, {
-        maxMessages: 30,
-        maxTokens: Math.min(DEFAULT_BUDGETS.conversationHistory, remainingBudget),
-        crossDay: true,
-      });
-
-      parts.push(`## Recent Conversation (${channel})\n${history.formatted}`);
-      usedTokens += history.tokenEstimate;
-      metadata.components.conversationHistory = history.tokenEstimate;
-      metadata.conversationMessagesIncluded = history.messageCount;
-
-      // Add channel info
-      parts.push(`\n**Channel:** ${channel}`);
-
-      // Highlight unprocessed messages requiring response
-      if (focusMessageIds.length > 0) {
-        parts.push(`**New messages requiring response:** ${focusMessageIds.length}`);
-      }
-    }
+  // 3. OPERATIONS.md (always included)
+  const operations = await readFileSafe(path.join(basePath, 'agent', 'context', 'OPERATIONS.md'));
+  if (operations) {
+    parts.push(operations);
+    const operationsTokens = estimateTokens(operations);
+    usedTokens += operationsTokens;
+    metadata.components.soul += operationsTokens; // Count with soul/system
   }
 
-  // 4. Relevant memory via vector search
+  // 4. PROJECTS.md (always included)
+  const projects = await readFileSafe(path.join(basePath, 'agent', 'PROJECTS.md'));
+  if (projects) {
+    parts.push(`## Projects Directory\n${projects}`);
+    const tokens = estimateTokens(projects);
+    usedTokens += tokens;
+    metadata.components.projects = tokens;
+  }
+
+  // 5. MEMORY.md / vector search (always included)
   if (query) {
     const vectorAvailable = await isVectorServiceAvailable();
     if (vectorAvailable) {
-      const remainingBudget = tokenBudget - usedTokens - 500; // Reserve for projects
+      const remainingBudget = tokenBudget - usedTokens - 1000; // Reserve for mode-specific content
       const memorySnippets = await searchMemory(query, {
         maxResults: 5,
         maxTokens: Math.min(DEFAULT_BUDGETS.relevantMemory, remainingBudget),
@@ -276,13 +239,59 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     }
   }
 
-  // 5. PROJECTS.md (always inject for all run types)
-  const projects = await readFileSafe(path.join(basePath, 'agent', 'PROJECTS.md'));
-  if (projects) {
-    parts.push(`## Projects Directory\n${projects}`);
-    const tokens = estimateTokens(projects);
-    usedTokens += tokens;
-    metadata.components.projects = tokens;
+  // 6. Mode-specific instructions
+  if (type === 'cron') {
+    const heartbeat = await readFileSafe(path.join(basePath, 'agent', 'context', 'HEARTBEAT.md'));
+    if (heartbeat) {
+      parts.push(heartbeat);
+      const tokens = estimateTokens(heartbeat);
+      usedTokens += tokens;
+      metadata.components.modeInstructions = tokens;
+    }
+  } else {
+    const conversation = await readFileSafe(path.join(basePath, 'agent', 'context', 'CONVERSATION.md'));
+    if (conversation) {
+      parts.push(conversation);
+      const tokens = estimateTokens(conversation);
+      usedTokens += tokens;
+      metadata.components.modeInstructions = tokens;
+    }
+
+    // 7. Channel-specific instructions (e.g., TELEGRAM.md, WEB.md)
+    if (channel) {
+      const channelConfig = await readFileSafe(
+        path.join(basePath, 'agent', 'context', `${channel.toUpperCase()}.md`)
+      );
+      if (channelConfig) {
+        parts.push(channelConfig);
+        const tokens = estimateTokens(channelConfig);
+        usedTokens += tokens;
+        metadata.components.modeInstructions += tokens;
+      }
+    }
+
+    // 8. Conversation history (with cross-day support)
+    if (channel) {
+      const remainingBudget = tokenBudget - usedTokens - 500; // Small reserve
+      const history = await getConversationHistoryForContext(channel, {
+        maxMessages: 30,
+        maxTokens: Math.min(DEFAULT_BUDGETS.conversationHistory, remainingBudget),
+        crossDay: true,
+      });
+
+      parts.push(`## Recent Conversation (${channel})\n${history.formatted}`);
+      usedTokens += history.tokenEstimate;
+      metadata.components.conversationHistory = history.tokenEstimate;
+      metadata.conversationMessagesIncluded = history.messageCount;
+
+      // Add channel info
+      parts.push(`\n**Channel:** ${channel}`);
+
+      // Highlight unprocessed messages requiring response
+      if (focusMessageIds.length > 0) {
+        parts.push(`**New messages requiring response:** ${focusMessageIds.length}`);
+      }
+    }
   }
 
   metadata.totalTokensEstimate = usedTokens;

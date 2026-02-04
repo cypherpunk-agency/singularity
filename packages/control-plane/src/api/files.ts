@@ -17,14 +17,6 @@ function getVectorServiceUrl(): string {
   return process.env.VECTOR_SERVICE_URL || 'http://vector:5000';
 }
 
-// Files that can be viewed/edited through the control plane
-const VIEWABLE_FILES = [
-  'TASKS.md',
-  'MEMORY.md',
-  'INBOX.md',
-  'config/HEARTBEAT.md',
-];
-
 export async function registerFilesRoutes(fastify: FastifyInstance) {
   // List workspace files
   fastify.get<{
@@ -33,21 +25,24 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     const agentDir = getAgentDir();
     const files: FileInfo[] = [];
 
-    // List main files
-    for (const fileName of VIEWABLE_FILES) {
-      const filePath = path.join(agentDir, fileName);
-      try {
-        const stat = await fs.stat(filePath);
-        files.push({
-          path: fileName,
-          name: fileName,
-          type: 'file',
-          size: stat.size,
-          modified: stat.mtime.toISOString(),
-        });
-      } catch {
-        // File doesn't exist, skip
+    // List all .md files in root agent directory
+    try {
+      const rootFiles = await fs.readdir(agentDir);
+      for (const fileName of rootFiles) {
+        if (fileName.endsWith('.md')) {
+          const filePath = path.join(agentDir, fileName);
+          const stat = await fs.stat(filePath);
+          files.push({
+            path: fileName,
+            name: fileName,
+            type: 'file',
+            size: stat.size,
+            modified: stat.mtime.toISOString(),
+          });
+        }
       }
+    } catch {
+      // Root dir read error
     }
 
     // List memory files
@@ -75,6 +70,28 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     files.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 
     return { files };
+  });
+
+  // Vector search across files (must be before wildcard routes)
+  fastify.get<{
+    Querystring: { q: string; limit?: string };
+    Reply: SearchResponse;
+  }>('/api/files/search', async (request, reply) => {
+    const { q: query, limit = '10' } = request.query;
+
+    if (!query || !query.trim()) {
+      reply.code(400).send({ results: [], query: '' });
+      return;
+    }
+
+    try {
+      // Call the vector search service via HTTP
+      const results = await runVectorSearch(query, parseInt(limit));
+      return { results, query };
+    } catch (error) {
+      fastify.log.error(error, 'Search failed');
+      return { results: [], query };
+    }
   });
 
   // Read file content
@@ -136,28 +153,6 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     } catch (error) {
       fastify.log.error(error, 'Failed to write file');
       reply.code(500).send({ success: false, path: filePath });
-    }
-  });
-
-  // Vector search across files
-  fastify.get<{
-    Querystring: { q: string; limit?: string };
-    Reply: SearchResponse;
-  }>('/api/files/search', async (request, reply) => {
-    const { q: query, limit = '10' } = request.query;
-
-    if (!query || !query.trim()) {
-      reply.code(400).send({ results: [], query: '' });
-      return;
-    }
-
-    try {
-      // Call the vector search service via HTTP
-      const results = await runVectorSearch(query, parseInt(limit));
-      return { results, query };
-    } catch (error) {
-      fastify.log.error(error, 'Search failed');
-      return { results: [], query };
     }
   });
 }

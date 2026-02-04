@@ -17,57 +17,61 @@ interface FileNode {
   fileCount?: number;
 }
 
-// Build hierarchical tree from flat file list
+// Recursively sort and count files in tree
+function sortAndCountTree(nodes: FileNode[]): FileNode[] {
+  return nodes
+    .map(node => {
+      if (node.type === 'folder' && node.files) {
+        const sortedFiles = sortAndCountTree(node.files);
+        // Count all files recursively
+        const fileCount = sortedFiles.reduce((count, child) => {
+          if (child.type === 'file') return count + 1;
+          return count + (child.fileCount || 0);
+        }, 0);
+        return { ...node, files: sortedFiles, fileCount };
+      }
+      return node;
+    })
+    .sort((a, b) => {
+      // Folders first, then files
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+// Build hierarchical tree from flat file list (supports arbitrary nesting)
 function buildFileTree(files: FileInfo[]): FileNode[] {
-  const tree: FileNode[] = [];
-  const folders = new Map<string, FileNode>();
+  const root: FileNode[] = [];
 
-  // Separate root files from folder files
-  const rootFiles = files.filter(f => !f.path.includes('/'));
-  const folderFiles = files.filter(f => f.path.includes('/'));
+  files.forEach(file => {
+    const parts = file.path.split('/');
+    let currentLevel = root;
 
-  // Group files by folder
-  folderFiles.forEach(file => {
-    const [folderName, ...rest] = file.path.split('/');
+    // Process each folder in the path
+    for (let i = 0; i < parts.length - 1; i++) {
+      const folderName = parts[i];
+      const folderPath = parts.slice(0, i + 1).join('/');
 
-    if (!folders.has(folderName)) {
-      folders.set(folderName, {
-        type: 'folder',
-        name: folderName,
-        path: folderName,
-        files: [],
-        fileCount: 0
-      });
+      let folder = currentLevel.find(n => n.type === 'folder' && n.name === folderName);
+      if (!folder) {
+        folder = { type: 'folder', name: folderName, path: folderPath, files: [], fileCount: 0 };
+        currentLevel.push(folder);
+      }
+      currentLevel = folder.files!;
     }
 
-    const folder = folders.get(folderName)!;
-    folder.files!.push({
+    // Add file to current level
+    currentLevel.push({
       type: 'file',
-      name: rest.join('/') || file.name,
+      name: parts[parts.length - 1],
       path: file.path,
       size: file.size,
       modified: file.modified
     });
-    folder.fileCount = (folder.fileCount || 0) + 1;
   });
 
-  // Build tree: folders first (sorted by name), then root files (sorted by name)
-  const sortedFolders = Array.from(folders.values()).sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
-
-  const sortedRootFiles = rootFiles
-    .map(f => ({
-      type: 'file' as const,
-      name: f.name,
-      path: f.path,
-      size: f.size,
-      modified: f.modified
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  tree.push(...sortedFolders, ...sortedRootFiles);
-  return tree;
+  // Sort folders first, then files, and count recursively
+  return sortAndCountTree(root);
 }
 
 export function Files() {
@@ -119,6 +123,74 @@ export function Files() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Recursive component to render file tree nodes
+  const renderNode = (node: FileNode, depth: number = 0): React.ReactNode => {
+    const isRoot = depth === 0;
+    const paddingClass = isRoot ? 'p-3' : 'p-2';
+    const iconSize = isRoot ? 'text-lg' : 'text-base';
+    const textSize = isRoot ? 'font-medium' : 'text-sm font-medium';
+
+    if (node.type === 'folder') {
+      return (
+        <div key={node.path} className="mb-1">
+          <button
+            onClick={() => toggleFolder(node.path)}
+            className={clsx(
+              'w-full text-left rounded-lg hover:bg-slate-700 text-slate-300 transition-colors',
+              paddingClass
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span className={iconSize}>
+                {expandedFolders.has(node.path) ? '📂' : '📁'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className={clsx(textSize, 'truncate')}>
+                  {node.name}/ <span className="text-xs text-slate-500">({node.fileCount})</span>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Folder contents (when expanded) */}
+          {expandedFolders.has(node.path) && node.files && (
+            <div className="ml-6 mt-1">
+              {node.files.map((child) => renderNode(child, depth + 1))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // File node
+    return (
+      <button
+        key={node.path}
+        onClick={() => handleSelectFile(node.path)}
+        className={clsx(
+          'w-full text-left rounded-lg mb-1 transition-colors',
+          paddingClass,
+          selectedFile === node.path
+            ? 'bg-primary-600 text-white'
+            : 'hover:bg-slate-700 text-slate-300'
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span className={iconSize}>📄</span>
+          <div className="flex-1 min-w-0">
+            <div className={clsx(textSize, 'truncate')}>{node.name}</div>
+            <div className={clsx(
+              'text-xs',
+              selectedFile === node.path ? 'text-primary-200' : 'text-slate-500'
+            )}>
+              {formatFileSize(node.size!)} • {format(new Date(node.modified!), 'MMM d, HH:mm')}
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  };
+
   // Build file tree from flat list
   const fileTree = buildFileTree(files);
 
@@ -137,84 +209,7 @@ export function Files() {
           <div className="p-4 text-slate-400">No files found</div>
         ) : (
           <div className="p-2">
-            {fileTree.map((node) => (
-              node.type === 'folder' ? (
-                // Folder node
-                <div key={node.path} className="mb-1">
-                  <button
-                    onClick={() => toggleFolder(node.path)}
-                    className="w-full text-left p-3 rounded-lg hover:bg-slate-700 text-slate-300 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">
-                        {expandedFolders.has(node.path) ? '📂' : '📁'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">
-                          {node.name}/ <span className="text-xs text-slate-500">({node.fileCount})</span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Folder contents (when expanded) */}
-                  {expandedFolders.has(node.path) && node.files && (
-                    <div className="ml-6 mt-1">
-                      {node.files.map((file) => (
-                        <button
-                          key={file.path}
-                          onClick={() => handleSelectFile(file.path)}
-                          className={clsx(
-                            'w-full text-left p-2 rounded-lg mb-1 transition-colors',
-                            selectedFile === file.path
-                              ? 'bg-primary-600 text-white'
-                              : 'hover:bg-slate-700 text-slate-300'
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">📄</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{file.name}</div>
-                              <div className={clsx(
-                                'text-xs',
-                                selectedFile === file.path ? 'text-primary-200' : 'text-slate-500'
-                              )}>
-                                {formatFileSize(file.size!)} • {format(new Date(file.modified!), 'MMM d, HH:mm')}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Root file node
-                <button
-                  key={node.path}
-                  onClick={() => handleSelectFile(node.path)}
-                  className={clsx(
-                    'w-full text-left p-3 rounded-lg mb-1 transition-colors',
-                    selectedFile === node.path
-                      ? 'bg-primary-600 text-white'
-                      : 'hover:bg-slate-700 text-slate-300'
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">📄</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{node.name}</div>
-                      <div className={clsx(
-                        'text-xs',
-                        selectedFile === node.path ? 'text-primary-200' : 'text-slate-500'
-                      )}>
-                        {formatFileSize(node.size!)} • {format(new Date(node.modified!), 'MMM d, HH:mm')}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              )
-            ))}
+            {fileTree.map((node) => renderNode(node, 0))}
           </div>
         )}
       </div>

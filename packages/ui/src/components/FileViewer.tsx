@@ -10,10 +10,11 @@ export function FileViewer() {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Files that can be edited
-  const editableFiles = ['MEMORY.md', 'INBOX.md', 'config/HEARTBEAT.md'];
+  const editableFiles = ['MEMORY.md', 'config/HEARTBEAT.md'];
   const canEdit = selectedFile && editableFiles.includes(selectedFile);
 
   const handleEdit = () => {
@@ -37,13 +38,14 @@ export function FileViewer() {
     if (!selectedFile) return;
 
     setSaving(true);
+    setSaveError(null);
     try {
       await api.updateFileContent(selectedFile, editContent);
       setIsEditing(false);
       // Refresh file content
       await selectFile(selectedFile);
     } catch (error) {
-      console.error('Failed to save file:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save file');
     } finally {
       setSaving(false);
     }
@@ -108,6 +110,13 @@ export function FileViewer() {
           ) : null}
         </div>
       </div>
+
+      {/* Save error message */}
+      {saveError && (
+        <div className="mx-4 mt-2 p-2 bg-red-900/50 border border-red-700 rounded text-red-300 text-sm">
+          {saveError}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">

@@ -11,7 +11,7 @@ interface ExtendedAgentStartedPayload extends AgentStartedPayload {
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const { addMessage, updateStatus, fetchStatus, fetchFiles, setAgentProcessing } = useStore();
+  const { addMessage, updateStatus, fetchStatus, fetchFiles, selectFile, setAgentProcessing } = useStore();
 
   // Use ref to always access the latest handleEvent, avoiding stale closure
   const handleEventRef = useRef<(event: WSEvent | { type: string; payload?: unknown }) => void>(() => {});
@@ -51,9 +51,17 @@ export function useWebSocket() {
 
       case WS_EVENTS.FILE_CHANGED:
       case WS_EVENTS.FILE_CREATED:
-      case WS_EVENTS.FILE_DELETED:
+      case WS_EVENTS.FILE_DELETED: {
+        const filePayload = event.payload as { path: string; changeType: 'modified' | 'created' | 'deleted' };
         fetchFiles();
+
+        // If the user is currently viewing this file, refresh its content
+        const currentFile = useStore.getState().selectedFile;
+        if (currentFile && filePayload.path === currentFile && filePayload.changeType !== 'deleted') {
+          selectFile(currentFile);
+        }
         break;
+      }
 
       case WS_EVENTS.STATUS_UPDATE: {
         const statusPayload = event.payload as { status: AgentStatus };
@@ -72,7 +80,7 @@ export function useWebSocket() {
       default:
         console.log('Unknown WebSocket event:', event.type);
     }
-  }, [addMessage, updateStatus, fetchStatus, fetchFiles, setAgentProcessing]);
+  }, [addMessage, updateStatus, fetchStatus, fetchFiles, selectFile, setAgentProcessing]);
 
   // Keep the ref updated with the latest handleEvent
   useEffect(() => {

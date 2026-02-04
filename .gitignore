@@ -14,6 +14,9 @@ logs/agent-output/*
 # Agent workspace (runtime state, config lives here but is not tracked)
 agent/
 
+# Backups
+backups/
+
 # Python
 __pycache__/
 *.py[cod]

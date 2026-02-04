@@ -83,6 +83,8 @@ export interface AgentSession {
   inputFile: string | null; // path to input .md file
   outputFile: string | null; // path to output .md file
   jsonFile: string | null; // path to output .json file
+  runType?: RunType; // 'chat' | 'cron'
+  channel?: Channel; // 'web' | 'telegram' (only for chat runs)
   metadata: {
     type?: 'result';
     subtype?: 'success' | 'error';

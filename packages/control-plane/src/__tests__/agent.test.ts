@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 
-// Mock child_process before importing the module under test
+// Mock child_process
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
   spawn: vi.fn(() => ({
@@ -34,12 +34,23 @@ vi.mock('../context/index.js', () => ({
   }),
 }));
 
+// Mock queue worker singleton
+const mockNotifyMessageArrived = vi.fn();
+const mockNotify = vi.fn();
+vi.mock('../queue/worker.js', () => ({
+  queueWorker: {
+    notifyMessageArrived: mockNotifyMessageArrived,
+    notify: mockNotify,
+  },
+}));
+
 const mockedExecSync = vi.mocked(execSync);
-const mockedSpawn = vi.mocked(spawn);
 
 describe('agent utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNotifyMessageArrived.mockClear();
+    mockNotify.mockClear();
     process.env.APP_DIR = '/app';
   });
 
@@ -49,7 +60,6 @@ describe('agent utilities', () => {
 
   describe('isLockHeld', () => {
     it('returns false when lock is available', async () => {
-      // Import fresh module after mocks are set up
       const { isLockHeld } = await import('../utils/agent.js');
 
       // flock succeeds (exit 0) means lock is NOT held
@@ -75,58 +85,19 @@ describe('agent utilities', () => {
     });
   });
 
-  describe('triggerAgentRun', () => {
-    it('returns true and spawns process when lock is not held', async () => {
+  describe('triggerAgentRun - message-centric model', () => {
+    it('chat runs notify worker and return null', async () => {
       const { triggerAgentRun } = await import('../utils/agent.js');
-
-      // Lock is not held (flock succeeds)
-      mockedExecSync.mockReturnValue(Buffer.from(''));
 
       const result = await triggerAgentRun({ channel: 'web', type: 'chat' });
 
-      expect(result).toBe(true);
-      expect(mockedSpawn).toHaveBeenCalledTimes(1);
-
-      // Verify spawn was called with correct arguments (platform-independent)
-      const spawnArgs = mockedSpawn.mock.calls[0][1] as string[];
-      expect(spawnArgs).toContain('--type');
-      expect(spawnArgs).toContain('chat');
-      expect(spawnArgs).toContain('--channel');
-      expect(spawnArgs).toContain('web');
-
-      // Check options
-      const spawnOpts = mockedSpawn.mock.calls[0][2] as any;
-      expect(spawnOpts.detached).toBe(true);
-      expect(spawnOpts.stdio).toBe('ignore');
+      // Chat runs return null (message-driven, no queue ID)
+      expect(result).toBeNull();
+      expect(mockNotifyMessageArrived).toHaveBeenCalledWith('web');
     });
 
-    it('returns false and does not spawn when lock is held', async () => {
+    it('multiple chat calls all notify worker', async () => {
       const { triggerAgentRun } = await import('../utils/agent.js');
-
-      // Lock is held (flock fails)
-      mockedExecSync.mockImplementation(() => {
-        throw new Error('flock failed');
-      });
-
-      const result = await triggerAgentRun({ channel: 'web', type: 'chat' });
-
-      expect(result).toBe(false);
-      expect(mockedSpawn).not.toHaveBeenCalled();
-    });
-
-    it('multiple rapid calls - first succeeds, subsequent fail', async () => {
-      const { triggerAgentRun } = await import('../utils/agent.js');
-
-      let callCount = 0;
-      mockedExecSync.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          // First call: lock is available
-          return Buffer.from('');
-        }
-        // Subsequent calls: lock is now held
-        throw new Error('flock failed');
-      });
 
       const results = await Promise.all([
         triggerAgentRun({ channel: 'web', type: 'chat' }),
@@ -134,39 +105,42 @@ describe('agent utilities', () => {
         triggerAgentRun({ channel: 'web', type: 'chat' }),
       ]);
 
-      // First call returns true, rest return false
-      expect(results[0]).toBe(true);
-      expect(results[1]).toBe(false);
-      expect(results[2]).toBe(false);
+      // All return null (no queueing for chat)
+      expect(results).toEqual([null, null, null]);
 
-      // spawn should only be called once
-      expect(mockedSpawn).toHaveBeenCalledTimes(1);
+      // Worker notified each time (deduplication happens in worker)
+      expect(mockNotifyMessageArrived).toHaveBeenCalledTimes(3);
     });
 
-    it('passes channel argument only for chat type', async () => {
+    it('telegram chat notifies with correct channel', async () => {
       const { triggerAgentRun } = await import('../utils/agent.js');
-
-      mockedExecSync.mockReturnValue(Buffer.from(''));
-
-      await triggerAgentRun({ channel: 'telegram', type: 'cron' });
-
-      // Channel should NOT be in args for cron type
-      const spawnArgs = mockedSpawn.mock.calls[0][1] as string[];
-      expect(spawnArgs).toContain('--type');
-      expect(spawnArgs).toContain('cron');
-      expect(spawnArgs).not.toContain('--channel');
-    });
-
-    it('includes channel for chat type', async () => {
-      const { triggerAgentRun } = await import('../utils/agent.js');
-
-      mockedExecSync.mockReturnValue(Buffer.from(''));
 
       await triggerAgentRun({ channel: 'telegram', type: 'chat' });
 
-      const spawnArgs = mockedSpawn.mock.calls[0][1] as string[];
-      expect(spawnArgs).toContain('--channel');
-      expect(spawnArgs).toContain('telegram');
+      expect(mockNotifyMessageArrived).toHaveBeenCalledWith('telegram');
+    });
+
+    it('cron runs enqueue and return queue ID', async () => {
+      const { triggerAgentRun } = await import('../utils/agent.js');
+
+      const result = await triggerAgentRun({ type: 'cron' });
+
+      // Cron runs return a queue ID
+      expect(result).toBeTruthy();
+      expect(typeof result).toBe('string');
+      expect(mockNotify).toHaveBeenCalled();
+      // Chat notification should not be called for cron
+      expect(mockNotifyMessageArrived).not.toHaveBeenCalled();
+    });
+
+    it('cron with channel still uses queue', async () => {
+      const { triggerAgentRun } = await import('../utils/agent.js');
+
+      const result = await triggerAgentRun({ channel: 'telegram', type: 'cron' });
+
+      // Cron runs return a queue ID even with channel
+      expect(result).toBeTruthy();
+      expect(mockNotify).toHaveBeenCalled();
     });
   });
 });

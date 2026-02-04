@@ -8,5 +8,5 @@ SHELL=/bin/bash
 # Hourly heartbeat - enqueue a cron run via the queue API
 0 * * * * curl -s -X POST http://localhost:3001/api/queue/enqueue -H 'Content-Type: application/json' -d '{"type":"cron"}' >> /app/logs/heartbeat.log 2>&1
 
-# Daily vector index rebuild at 3:30 AM
-30 3 * * * curl -s -X POST http://vector:5000/index >> /app/logs/vector-index.log 2>&1
+# Hourly vector index rebuild at :50
+50 * * * * curl -s -X POST http://vector:5000/index >> /app/logs/vector-index.log 2>&1

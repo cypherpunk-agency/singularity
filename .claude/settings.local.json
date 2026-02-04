@@ -52,7 +52,24 @@
       "Bash(git -C D:/Code/productivity/singularity ls-files agent/config/)",
       "Bash(git -C D:/Code/productivity/singularity check-ignore -v agent/config/SYSTEM.md)",
       "Bash(git -C D:/Code/productivity/singularity add packages/control-plane/src/context/prepare.ts scripts/run-agent.sh)",
-      "Bash(git -C D:/Code/productivity/singularity commit -m \"$\\(cat <<''EOF''\nAdd SYSTEM.md injection to agent context\n\nInject agent/config/SYSTEM.md after SOUL.md and before TOOLS.md in both\nthe Node.js context preparation and the bash script. This gives the agent\nawareness of its execution environment, directory structure, and services.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C D:/Code/productivity/singularity commit -m \"$\\(cat <<''EOF''\nAdd SYSTEM.md injection to agent context\n\nInject agent/config/SYSTEM.md after SOUL.md and before TOOLS.md in both\nthe Node.js context preparation and the bash script. This gives the agent\nawareness of its execution environment, directory structure, and services.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /d/Code/productivity/singularity status)",
+      "Bash(git -C /d/Code/productivity/singularity diff)",
+      "Bash(git -C /d/Code/productivity/singularity log --oneline -5)",
+      "Bash(git -C /d/Code/productivity/singularity status -u)",
+      "Bash(git -C /d/Code/productivity/singularity ls-files agent/config/)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" diff --stat)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" status agent/)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" check-ignore agent/config/SYSTEM.md agent/memory/reference-patterns.md)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" diff packages/control-plane/src/context/prepare.ts)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" add packages/control-plane/src/context/prepare.ts)",
+      "Bash(git -C \"D:/Code/productivity/singularity\" commit -m \"$\\(cat <<''EOF''\nLazy-load TASKS.md in chat context to reduce tokens\n\nOnly inject TASKS.md when relevant:\n- Always for cron/heartbeat runs\n- For chat only when query contains task-related keywords\n\nSaves ~500-900 tokens on general chat messages.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(pnpm --filter @singularity/control-plane add:*)",
+      "Bash(jq:*)",
+      "Bash(git -C \"D:\\\\Code\\\\productivity\\\\singularity\" status)",
+      "Bash(git -C \"D:\\\\Code\\\\productivity\\\\singularity\" diff packages/control-plane/src/queue/worker.ts)",
+      "Bash(git -C /d/Code/productivity/singularity diff --stat)"
     ]
   }
 }

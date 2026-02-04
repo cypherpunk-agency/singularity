@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { SendMessageRequest, SendMessageResponse, RespondMessageRequest, Message, Channel } from '@singularity/shared';
 import { saveHumanMessage, saveAgentResponse, getRecentMessages, getConversationDates, getConversationHistory } from '../conversation.js';
 import { WSManager } from '../ws/events.js';
-import { triggerAgentRun } from '../utils/agent.js';
+import { queueWorker } from '../queue/worker.js';
 import { sendToTelegram } from '../channels/telegram.js';
 
 export async function registerChatRoutes(fastify: FastifyInstance, wsManager: WSManager) {
@@ -25,8 +25,8 @@ export async function registerChatRoutes(fastify: FastifyInstance, wsManager: WS
       // Broadcast the message to all connected WebSocket clients
       wsManager.broadcastChatMessage(message);
 
-      // Trigger agent to process the message with channel context and vector search
-      triggerAgentRun({ channel, type: 'chat', query: text.trim() });
+      // Notify worker that message arrived - it will poll for unprocessed messages
+      queueWorker.notifyMessageArrived(channel);
 
       return { success: true, messageId: message.id };
     } catch (error) {

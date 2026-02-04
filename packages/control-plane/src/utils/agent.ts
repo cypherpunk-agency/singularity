@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { Channel, RunType, QueuedRun } from '@singularity/shared';
+import { Channel, RunType } from '@singularity/shared';
 import { hasUnprocessedMessages } from '../conversation.js';
 import { queueManager } from '../queue/manager.js';
 import { queueWorker } from '../queue/worker.js';
@@ -49,36 +49,24 @@ export interface TriggerOptions {
 
 /**
  * Trigger the agent to run with the given options.
- * Enqueues the run and returns the queue ID.
- * The queue worker will process it sequentially.
  *
- * For chat runs, deduplicates by channel - if there's already a pending or
- * processing chat run for the same channel, returns null instead of enqueueing.
- * This prevents message storms (e.g., multiple Telegram messages arriving at once)
- * from creating duplicate runs.
+ * For chat runs: Simply notifies the worker that messages arrived.
+ * The worker polls for unprocessed messages (message-centric model).
+ * Messages saved to JSONL ARE the queue - no separate queue entry needed.
+ *
+ * For cron runs: Enqueues to the queue and returns the queue ID.
  */
 export async function triggerAgentRun(options: TriggerOptions = {}): Promise<string | null> {
   const { channel, type = 'chat', prompt, query } = options;
 
-  // For chat runs, check if there's already a pending/processing run for this channel
+  // Chat runs are now message-driven - just notify the worker
   if (type === 'chat') {
-    const pending = await queueManager.getPending();
-    const processing = await queueManager.getProcessing();
-    const allActive = [...pending, processing].filter(Boolean) as QueuedRun[];
-
-    // Find existing run for same channel (or any chat run if no channel specified)
-    const existing = allActive.find(run =>
-      run.type === 'chat' &&
-      (channel ? run.channel === channel : true)
-    );
-
-    if (existing) {
-      console.log(`[triggerAgentRun] Skipping duplicate: existing ${existing.status} run ${existing.id} for channel=${channel || 'any'}`);
-      return null;
-    }
+    console.log(`[triggerAgentRun] Chat run requested, notifying worker (channel=${channel || 'N/A'})`);
+    queueWorker.notifyMessageArrived(channel);
+    return null; // No queue ID for message-driven runs
   }
 
-  // Enqueue the run
+  // Cron runs still use the queue
   const queuedRun = await queueManager.enqueue({
     type,
     channel,
@@ -89,7 +77,7 @@ export async function triggerAgentRun(options: TriggerOptions = {}): Promise<str
   // Wake worker immediately
   queueWorker.notify();
 
-  console.log(`[triggerAgentRun] Enqueued run: queueId=${queuedRun.id}, type=${type}, channel=${channel || 'N/A'}`);
+  console.log(`[triggerAgentRun] Enqueued cron run: queueId=${queuedRun.id}`);
 
   return queuedRun.id;
 }

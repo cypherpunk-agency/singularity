@@ -6,6 +6,7 @@ import clsx from 'clsx';
 const navItems = [
   { path: '/chat', label: 'Chat', icon: '💬' },
   { path: '/jobs', label: 'Jobs', icon: '💼' },
+  { path: '/interview', label: 'Interview', icon: '🎯' },
   { path: '/files', label: 'Files', icon: '📁' },
   { path: '/outputs', label: 'Outputs', icon: '📤' },
   { path: '/history', label: 'History', icon: '📜' },
@@ -19,6 +20,7 @@ export function Layout() {
     const titles: Record<string, string> = {
       '/chat': 'Chat - Singularity',
       '/jobs': 'Jobs - Singularity',
+      '/interview': 'Interview Prep - Singularity',
       '/files': 'Files - Singularity',
       '/outputs': 'Outputs - Singularity',
       '/history': 'History - Singularity',

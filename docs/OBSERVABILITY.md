@@ -4,29 +4,44 @@ Tools and endpoints for debugging and monitoring agent runs.
 
 ## Queue Monitoring
 
-Agent runs are processed sequentially through a queue. Monitor queue status:
+The system uses a **message-centric model**:
+- **Chat runs**: Messages in JSONL ARE the queue (no queue entry)
+- **Cron runs**: Traditional queue system via `state/queue.jsonl`
+
+### Checking Queue Status
 
 ```bash
-# Check queue status (pending count, current run, recent completed)
+# Check queue status (cron runs only, plus recent completed)
 curl http://localhost:3001/api/queue/status | jq
 
-# List pending runs
+# List pending cron runs
 curl http://localhost:3001/api/queue | jq
 
 # Get specific queued run by ID
 curl http://localhost:3001/api/queue/QUEUE_ID | jq
 ```
 
+### Checking Unprocessed Messages (Chat)
+
+Messages without `processedAt` are pending:
+
+```bash
+# View unprocessed messages (look for entries WITHOUT processedAt)
+docker exec singularity-agent bash -c "tail -10 /app/agent/conversation/web/$(date +%Y-%m-%d).jsonl | jq 'select(.processedAt == null)'"
+
+# Count unprocessed messages per channel
+docker exec singularity-agent bash -c "cat /app/agent/conversation/telegram/$(date +%Y-%m-%d).jsonl 2>/dev/null | jq -s '[.[] | select(.from==\"human\" and .processedAt == null)] | length'"
+```
+
 ### Queue Status Response
 
 ```json
 {
-  "pendingCount": 2,
+  "pendingCount": 1,
   "processingRun": {
     "id": "abc-123",
-    "type": "chat",
-    "channel": "web",
-    "priority": 1,
+    "type": "cron",
+    "priority": 2,
     "status": "processing",
     "enqueuedAt": "2026-02-01T23:50:51Z",
     "startedAt": "2026-02-01T23:50:51Z",
@@ -36,15 +51,26 @@ curl http://localhost:3001/api/queue/QUEUE_ID | jq
 }
 ```
 
-### Queue File
+**Note**: Chat runs no longer appear in `processingRun` - they're tracked via message `processedAt` timestamps.
 
-Runs persist in `state/queue.jsonl`:
+### Queue File (Cron Only)
+
+Cron runs persist in `state/queue.jsonl`:
 
 ```json
-{"id":"abc-123","type":"chat","channel":"web","priority":1,"status":"completed","enqueuedAt":"...","startedAt":"...","completedAt":"...","runId":"20260201-235051"}
+{"id":"abc-123","type":"cron","priority":2,"status":"completed","enqueuedAt":"...","startedAt":"...","completedAt":"...","runId":"20260201-235051"}
 ```
 
-Priority: `1` = chat (higher), `2` = cron (lower). FIFO within same priority.
+### Message Tracking (Chat)
+
+Chat messages in `agent/conversation/{channel}/YYYY-MM-DD.jsonl`:
+
+```json
+{"id":"msg-1","text":"Hello","from":"human","channel":"web","timestamp":"..."}
+{"id":"msg-2","text":"Hello","from":"human","channel":"web","timestamp":"...","processedAt":"2026-02-01T23:51:00Z"}
+```
+
+Messages with `processedAt` have been processed. Messages without are pending.
 
 ## Input Logging
 
@@ -151,8 +177,11 @@ Each line is a JSON message:
 
 ```json
 {"id":"abc123","text":"Hello!","from":"human","channel":"web","timestamp":"2026-02-01T21:43:01Z"}
+{"id":"abc123","text":"Hello!","from":"human","channel":"web","timestamp":"2026-02-01T21:43:01Z","processedAt":"2026-02-01T21:43:30Z"}
 {"id":"def456","text":"Hi there!","from":"agent","channel":"web","timestamp":"2026-02-01T21:43:30Z"}
 ```
+
+**Message tracking**: Human messages without `processedAt` are unprocessed. The worker polls for these and batches them into runs.
 
 ## Quick Debugging Workflow
 
@@ -191,8 +220,11 @@ docker exec singularity-agent bash -c "cat /app/logs/agent-input/RUN_ID-input.md
 # View web conversation
 docker exec singularity-agent bash -c "tail -10 /app/agent/conversation/web/$(date +%Y-%m-%d).jsonl"
 
-# Check if agent is running (via queue)
-curl -s http://localhost:3001/api/queue/status | jq -r 'if .processingRun then "Running: \(.processingRun.type)" else "Idle" end'
+# Check if agent is running (only shows cron runs, chat runs are message-driven)
+curl -s http://localhost:3001/api/queue/status | jq -r 'if .processingRun then "Running cron: \(.processingRun.runId)" else "No cron running" end'
+
+# Check for unprocessed chat messages
+docker exec singularity-agent bash -c "cat /app/agent/conversation/*/$(date +%Y-%m-%d).jsonl 2>/dev/null | jq -s '[.[] | select(.from==\"human\" and .processedAt == null)] | length' 2>/dev/null || echo 0"
 ```
 
 ## Log Directory Structure
@@ -207,7 +239,13 @@ logs/
 └── heartbeat.log             # General container logs
 
 state/
-├── queue.jsonl               # Run queue (pending, processing, completed)
+├── queue.jsonl               # Cron run queue (pending, processing, completed)
 ├── run-history.jsonl         # Completed run metadata
 └── session-id.txt            # Current Claude session ID
+
+agent/conversation/           # Chat message queue (message-centric)
+├── web/
+│   └── YYYY-MM-DD.jsonl      # Messages with optional processedAt
+└── telegram/
+    └── YYYY-MM-DD.jsonl      # Messages with optional processedAt
 ```

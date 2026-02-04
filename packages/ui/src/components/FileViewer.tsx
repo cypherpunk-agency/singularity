@@ -13,9 +13,8 @@ export function FileViewer() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Files that can be edited
-  const editableFiles = ['MEMORY.md', 'config/HEARTBEAT.md'];
-  const canEdit = selectedFile && editableFiles.includes(selectedFile);
+  // All .md files can be edited
+  const canEdit = selectedFile?.endsWith('.md');
 
   const handleEdit = () => {
     setEditContent(fileContent || '');

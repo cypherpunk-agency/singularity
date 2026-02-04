@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { AgentSession } from '@singularity/shared';
+import { AgentSession, RunType, Channel } from '@singularity/shared';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
@@ -35,6 +35,40 @@ function timestampIdToISO(id: string): string {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
 }
 
+// Parse run metadata from input file
+async function parseInputMetadata(inputPath: string): Promise<{ runType?: RunType; channel?: Channel }> {
+  try {
+    const content = await fs.readFile(inputPath, 'utf-8');
+    const lines = content.split('\n').slice(0, 10); // Only check first 10 lines
+
+    let runType: RunType | undefined;
+    let channel: Channel | undefined;
+
+    for (const line of lines) {
+      // Match: **Type:** chat or **Type:** cron
+      if (line.startsWith('**Type:**')) {
+        const match = line.match(/\*\*Type:\*\*\s+(chat|cron)/);
+        if (match) runType = match[1] as RunType;
+      }
+
+      // Match: **Channel:** web or **Channel:** telegram
+      if (line.startsWith('**Channel:**')) {
+        const match = line.match(/\*\*Channel:\*\*\s+(web|telegram)/);
+        if (match) channel = match[1] as Channel;
+      }
+
+      // Stop once we have both or reach end of header
+      if ((runType && (runType === 'cron' || channel)) || line.startsWith('##')) {
+        break;
+      }
+    }
+
+    return { runType, channel };
+  } catch {
+    return {};
+  }
+}
+
 export async function registerSessionsRoutes(fastify: FastifyInstance) {
   // List all sessions
   fastify.get<{
@@ -61,17 +95,25 @@ export async function registerSessionsRoutes(fastify: FastifyInstance) {
         const id = parseTimestampId(file);
         if (!id) continue;
 
+        const inputPath = path.join(inputDir, file);
+        const { runType, channel } = await parseInputMetadata(inputPath);
+
         if (!sessionMap.has(id)) {
           sessionMap.set(id, {
             id,
             timestamp: timestampIdToISO(id),
-            inputFile: path.join(inputDir, file),
+            inputFile: inputPath,
             outputFile: null,
             jsonFile: null,
+            runType,
+            channel,
             metadata: {},
           });
         } else {
-          sessionMap.get(id)!.inputFile = path.join(inputDir, file);
+          const session = sessionMap.get(id)!;
+          session.inputFile = inputPath;
+          session.runType = runType;
+          session.channel = channel;
         }
       }
 
@@ -170,8 +212,11 @@ export async function registerSessionsRoutes(fastify: FastifyInstance) {
       }
 
       // Load content
+      const inputPath = inputFile ? path.join(inputDir, inputFile) : null;
+      const { runType, channel } = inputPath ? await parseInputMetadata(inputPath) : {};
+
       const [inputContent, outputContent, metadata] = await Promise.all([
-        inputFile ? fs.readFile(path.join(inputDir, inputFile), 'utf-8').catch(() => undefined) : undefined,
+        inputPath ? fs.readFile(inputPath, 'utf-8').catch(() => undefined) : undefined,
         outputMdFile ? fs.readFile(path.join(outputDir, outputMdFile), 'utf-8').catch(() => undefined) : undefined,
         outputJsonFile ? fs.readFile(path.join(outputDir, outputJsonFile), 'utf-8').then(c => JSON.parse(c)).catch(() => ({})) : {},
       ]);
@@ -179,9 +224,11 @@ export async function registerSessionsRoutes(fastify: FastifyInstance) {
       return {
         id: sanitizedId,
         timestamp: timestampIdToISO(sanitizedId),
-        inputFile: inputFile ? path.join(inputDir, inputFile) : null,
+        inputFile: inputPath,
         outputFile: outputMdFile ? path.join(outputDir, outputMdFile) : null,
         jsonFile: outputJsonFile ? path.join(outputDir, outputJsonFile) : null,
+        runType,
+        channel,
         metadata,
         inputContent,
         outputContent,

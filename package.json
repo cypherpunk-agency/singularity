@@ -16,5 +16,11 @@
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
+  },
+  "dependencies": {
+    "commonmark": "^0.31.2",
+    "get-stream": "^9.0.1",
+    "pdfkit": "^0.17.2",
+    "pdfkit-commonmark": "^1.2.0"
   }
 }

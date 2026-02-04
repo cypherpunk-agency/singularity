@@ -3,7 +3,7 @@ export const PATHS = {
   // Agent files
   AGENT_DIR: '/app/agent',
   HEARTBEAT_FILE: '/app/agent/config/HEARTBEAT.md',
-  TASKS_FILE: '/app/agent/TASKS.md',
+  PROJECTS_FILE: '/app/agent/PROJECTS.md',
   MEMORY_FILE: '/app/agent/MEMORY.md',
   // INBOX_FILE removed - messages now go directly to conversation channels
   MEMORY_DIR: '/app/agent/memory',
@@ -92,7 +92,6 @@ export const TELEGRAM_COMMANDS = {
   HISTORY: '/history',
   SEARCH: '/search',
   RUN: '/run',
-  TASKS: '/tasks',
   SETTINGS: '/settings',
   HELP: '/help',
 } as const;

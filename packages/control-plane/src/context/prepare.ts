@@ -16,7 +16,7 @@ const DEFAULT_BUDGETS = {
   modeInstructions: 300,
   conversationHistory: 2000,
   relevantMemory: 1500,
-  tasks: 500,
+  projects: 500,
   dailyLogs: 500,
 };
 
@@ -41,7 +41,7 @@ export interface PreparedContext {
       modeInstructions: number;
       conversationHistory: number;
       relevantMemory: number;
-      tasks: number;
+      projects: number;
     };
   };
 }
@@ -161,7 +161,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       modeInstructions: 0,
       conversationHistory: 0,
       relevantMemory: 0,
-      tasks: 0,
+      projects: 0,
     },
   };
 
@@ -226,7 +226,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
 
     // 3. Conversation history (with cross-day support)
     if (channel) {
-      const remainingBudget = tokenBudget - usedTokens - 2500; // Reserve for memory + tasks
+      const remainingBudget = tokenBudget - usedTokens - 2500; // Reserve for memory + projects
       const history = await getConversationHistoryForContext(channel, {
         maxMessages: 30,
         maxTokens: Math.min(DEFAULT_BUDGETS.conversationHistory, remainingBudget),
@@ -252,7 +252,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   if (query) {
     const vectorAvailable = await isVectorServiceAvailable();
     if (vectorAvailable) {
-      const remainingBudget = tokenBudget - usedTokens - 500; // Reserve for tasks
+      const remainingBudget = tokenBudget - usedTokens - 500; // Reserve for projects
       const memorySnippets = await searchMemory(query, {
         maxResults: 5,
         maxTokens: Math.min(DEFAULT_BUDGETS.relevantMemory, remainingBudget),
@@ -286,19 +286,13 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     }
   }
 
-  // 5. TASKS.md (lazy-load: always for cron, conditional for chat)
-  const shouldInjectTasks =
-    type === 'cron' ||  // Always for heartbeat
-    (query && /\b(task|tasks|todo|todos|working on|what are you doing|progress|to-do|to do)\b/i.test(query));
-
-  if (shouldInjectTasks) {
-    const tasks = await readFileSafe(path.join(basePath, 'agent', 'TASKS.md'));
-    if (tasks) {
-      parts.push(`## Current Tasks\n${tasks}`);
-      const tokens = estimateTokens(tasks);
-      usedTokens += tokens;
-      metadata.components.tasks = tokens;
-    }
+  // 5. PROJECTS.md (always inject for all run types)
+  const projects = await readFileSafe(path.join(basePath, 'agent', 'PROJECTS.md'));
+  if (projects) {
+    parts.push(`## Projects Directory\n${projects}`);
+    const tokens = estimateTokens(projects);
+    usedTokens += tokens;
+    metadata.components.projects = tokens;
   }
 
   metadata.totalTokensEstimate = usedTokens;

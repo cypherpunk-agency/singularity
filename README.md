@@ -70,9 +70,9 @@ Queue a heartbeat run:
 curl -X POST http://localhost:3001/api/queue/enqueue -H 'Content-Type: application/json' -d '{"type":"cron"}'
 ```
 
-Queue a chat run:
+Send a chat message (message-driven, no queue):
 ```bash
-curl -X POST http://localhost:3001/api/queue/enqueue -H 'Content-Type: application/json' -d '{"type":"chat","channel":"web"}'
+curl -X POST http://localhost:3001/api/chat -H 'Content-Type: application/json' -d '{"text":"Hello agent","channel":"web"}'
 ```
 
 Check queue status:
@@ -93,7 +93,7 @@ cat logs/heartbeat.log
 
 ```
 agent/
-├── TASKS.md          # Pending/completed tasks (agent-managed)
+├── PROJECTS.md       # Project directory (~200 lines)
 ├── MEMORY.md         # Long-term curated memory (cross-session)
 ├── config/           # Agent configuration (mutable)
 │   ├── SOUL.md       # Core identity (all contexts)
@@ -138,7 +138,8 @@ All contexts share `MEMORY.md` and `TASKS.md` for cross-session continuity.
 - **Agent is autonomous**: Manages tasks in TASKS.md, guided by HEARTBEAT.md
 - **Agent runs on-demand** when messages arrive (also hourly via cron as fallback)
 - **Human communicates via chat** (Web UI or Telegram)
-- **Messages trigger immediate processing** (saved to channel conversation, agent starts automatically)
+- **Messages are the queue**: Saved to JSONL, worker polls for unprocessed messages
+- **Multiple messages batch together**: Rapid messages become ONE agent run (no duplicates)
 - **Agent responds via API** which broadcasts to WebSocket and sends to Telegram if needed
 
 ### Container Architecture
@@ -289,7 +290,19 @@ curl http://localhost:3001/api/debug/runs/20260201-123456/output
 - **Hourly** (minute 0): Enqueue heartbeat via queue API (processed sequentially)
 - **Daily at 3:30 AM**: Rebuild vector search index
 
-All runs go through the queue to prevent concurrent execution. Chat runs have higher priority than cron runs.
+### Message Processing Model
+
+**Chat runs** use a message-centric model:
+- Messages saved to JSONL files ARE the queue (no separate queue entry)
+- Worker polls for unprocessed messages (messages without `processedAt`)
+- Multiple rapid messages are batched into ONE agent run
+- Telegram channel is checked before web channel
+
+**Cron runs** use the traditional queue:
+- Enqueued via `/api/queue/enqueue`
+- Processed sequentially after any pending chat messages
+
+This prevents "ghost runs" where multiple messages would create duplicate sessions.
 
 ## Environment Variables
 

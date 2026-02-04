@@ -16,7 +16,7 @@ The context preparation system intelligently assembles context for agent runs, u
 │  │ channel: web | telegram │  │  │ 2. CONVERSATION.md/HEARTBEAT│    │
 │  │ query: last user message│──┼─►│ 3. Conversation history     │    │
 │  └─────────────────────────┘  │  │ 4. Relevant memory snippets │    │
-│                               │  │ 5. TASKS.md                  │    │
+│                               │  │ 5. PROJECTS.md               │    │
 │  Token Budget: ~8000 tokens   │  └─────────────────────────────┘    │
 │                               │                                      │
 └───────────────────────────────┴──────────────────────────────────────┘
@@ -30,7 +30,7 @@ The context preparation system intelligently assembles context for agent runs, u
 │ web/*.jsonl   │           │ MEMORY.md           │          │ SOUL.md        │
 │ telegram/*.   │           │ memory/*.md         │          │ CONVERSATION.md│
 │ (last N msgs, │           │ (semantic search    │          │ HEARTBEAT.md   │
-│  cross-day)   │           │  by user query)     │          │ TASKS.md       │
+│  cross-day)   │           │  by user query)     │          │ PROJECTS.md    │
 └───────────────┘           └─────────────────────┘          └────────────────┘
 ```
 
@@ -42,7 +42,7 @@ The context preparation system intelligently assembles context for agent runs, u
 | CONVERSATION/HEARTBEAT.md | Required | ~300 tokens | Mode instructions |
 | Conversation History | High | ~2000 tokens | Last 20-30 messages |
 | Relevant Memory | Medium | ~1500 tokens | Vector search results |
-| TASKS.md | Medium | ~500 tokens | Current tasks |
+| PROJECTS.md | Medium | ~500 tokens | Projects directory |
 | **Total** | | **~5300** | Buffer for response |
 
 ## API Reference
@@ -72,7 +72,7 @@ Prepare context for an agent run without triggering execution.
       "modeInstructions": 280,
       "conversationHistory": 1200,
       "relevantMemory": 820,
-      "tasks": 500
+      "projects": 500
     }
   }
 }
@@ -180,10 +180,22 @@ The shell script now accepts pre-prepared context:
   --user-prompt "Process the incoming message and respond via the API."
 ```
 
-When `triggerAgentRun()` is called with `usePreparedContext: true` (default), it:
-1. Calls `prepareContext()` to assemble intelligent context
-2. Writes system prompt to temp file
-3. Passes file path to run-agent.sh
+### Chat Runs (Message-Centric)
+
+When a chat message arrives, the worker:
+1. Polls for unprocessed messages via `checkForUnprocessedMessages()`
+2. Calls `prepareContext()` to assemble intelligent context
+3. Writes system prompt to temp file
+4. Spawns `run-agent.sh` with context file path
+5. Marks messages as processed after successful run
+
+### Cron Runs (Queue-Based)
+
+When `triggerAgentRun()` is called with `type: 'cron'`:
+1. Enqueues run in `state/queue.jsonl`
+2. Worker picks up run and calls `prepareContext()`
+3. Writes system prompt to temp file
+4. Spawns `run-agent.sh` with context file path
 
 ## Vector Index Maintenance
 

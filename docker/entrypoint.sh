@@ -14,7 +14,8 @@ mkdir -p /app/logs/agent-output
 mkdir -p /app/logs/agent-input
 mkdir -p /app/state
 mkdir -p /home/agent/.claude
-chown -R agent:agent /app/agent /app/logs /app/state /home/agent/.claude
+mkdir -p /home/agent/.config
+chown -R agent:agent /app/agent /app/logs /app/state /home/agent/.claude /home/agent/.config
 
 # Initialize session ID if not exists
 if [ ! -f /app/state/session-id.txt ]; then
@@ -66,7 +67,7 @@ cron
 # Start control plane in background (as agent user)
 echo "[$(date -Iseconds)] Starting control plane..."
 cd /app
-su -s /bin/bash agent -c 'node /app/packages/control-plane/dist/index.js' &
+su -s /bin/bash agent -c 'HOME=/home/agent node /app/packages/control-plane/dist/index.js' &
 CONTROL_PLANE_PID=$!
 echo "[$(date -Iseconds)] Control plane started (PID: $CONTROL_PLANE_PID)"
 

@@ -5,6 +5,7 @@
 FROM node:20-slim
 
 # Install system dependencies (no Python - that's in the vector service)
+# Chromium and dependencies are needed for Puppeteer PDF generation
 RUN apt-get update && apt-get install -y \
     cron \
     jq \
@@ -12,7 +13,17 @@ RUN apt-get update && apt-get install -y \
     curl \
     sqlite3 \
     procps \
-    && rm -rf /var/lib/apt/lists/*
+    chromium \
+    fonts-dejavu-core \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -fv
+
+# Tell Puppeteer to use system Chromium instead of downloading its own
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Install pnpm
 RUN npm install -g pnpm@9

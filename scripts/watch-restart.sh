@@ -32,9 +32,9 @@ while true; do
         pkill -f "node.*control-plane/dist" || true
         sleep 2
 
-        # Restart control-plane (as agent user)
+        # Restart control-plane (as agent user, with HOME set for puppeteer)
         log "Starting control-plane..."
-        su -s /bin/bash agent -c 'node /app/packages/control-plane/dist/index.js >> /app/logs/control-plane.log 2>&1' &
+        su -s /bin/bash agent -c 'HOME=/home/agent node /app/packages/control-plane/dist/index.js >> /app/logs/control-plane.log 2>&1' &
 
         # Wait for it to be healthy
         for i in {1..30}; do

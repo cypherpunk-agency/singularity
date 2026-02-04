@@ -5,7 +5,9 @@ import { saveHumanMessage, getRecentConversation } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
 import { queueManager } from '../queue/manager.js';
 import { transcribe } from '../services/transcription.js';
+import { synthesize } from '../services/tts.js';
 import { getTelegramPreferences, setTelegramPreferences } from './telegram-preferences.js';
+import { InputFile } from 'grammy';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -344,8 +346,10 @@ async function getAgentStatus() {
 
 /**
  * Send a message to Telegram (called when agent responds via /api/chat/respond)
+ * @param htmlText - HTML-formatted text for text messages
+ * @param plainText - Optional plain/markdown text for TTS (avoids reading HTML tags aloud)
  */
-export async function sendToTelegram(text: string): Promise<void> {
+export async function sendToTelegram(htmlText: string, plainText?: string): Promise<void> {
   if (!bot || !authorizedChatId) return;
 
   // Stop typing indicator when sending response
@@ -355,20 +359,28 @@ export async function sendToTelegram(text: string): Promise<void> {
     const prefs = await getTelegramPreferences();
 
     if (prefs.outputMode === 'voice') {
-      // TODO: TTS implementation will go here
-      // For now, send text with indicator
-      const voiceText = `🔊 <i>[Voice mode - TTS coming soon]</i>\n\n${text}`;
-      await bot.api.sendMessage(authorizedChatId, voiceText, { parse_mode: 'HTML' });
+      // Synthesize voice and send as voice message
+      // Use plainText for TTS if available, otherwise strip HTML tags
+      const ttsText = plainText || htmlText.replace(/<[^>]+>/g, '');
+      try {
+        const audioBuffer = await synthesize(ttsText);
+        await bot.api.sendVoice(authorizedChatId, new InputFile(audioBuffer, 'response.ogg'));
+      } catch (ttsError) {
+        // TTS failed, fall back to text with error indicator
+        console.error('TTS synthesis failed, falling back to text:', ttsError);
+        const fallbackText = `⚠️ <i>[Voice unavailable]</i>\n\n${htmlText}`;
+        await bot.api.sendMessage(authorizedChatId, fallbackText, { parse_mode: 'HTML' });
+      }
     } else {
-      await bot.api.sendMessage(authorizedChatId, text, { parse_mode: 'HTML' });
+      await bot.api.sendMessage(authorizedChatId, htmlText, { parse_mode: 'HTML' });
     }
   } catch (error) {
     // If HTML parsing failed, fallback to plain text
     if (error instanceof Error && error.message.includes("can't parse entities")) {
       console.warn('Telegram HTML parsing failed, falling back to plain text');
-      const plainText = stripHtmlForPlainText(text);
+      const strippedText = stripHtmlForPlainText(htmlText);
       try {
-        await bot.api.sendMessage(authorizedChatId, plainText);
+        await bot.api.sendMessage(authorizedChatId, strippedText);
       } catch (fallbackError) {
         console.error('Telegram fallback also failed:', fallbackError);
       }

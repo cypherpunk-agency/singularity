@@ -87,8 +87,9 @@ export async function extractAndRouteResponse(
     wsManager.broadcastChatMessage(message);
 
     // Send to Telegram if telegram channel
+    // Pass both HTML (for text display) and original markdown (for TTS)
     if (channel === 'telegram') {
-      await sendToTelegram(formattedText);
+      await sendToTelegram(formattedText, resultText);
     }
 
     console.log(`[extractor] Routed response for run ${entry.runId} to ${channel} channel`);

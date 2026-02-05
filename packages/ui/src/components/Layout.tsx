@@ -10,6 +10,7 @@ const navItems = [
   { path: '/files', label: 'Files', icon: '📁' },
   { path: '/outputs', label: 'Outputs', icon: '📤' },
   { path: '/history', label: 'History', icon: '📜' },
+  { path: '/usage', label: 'Usage', icon: '$' },
 ] as const;
 
 export function Layout() {
@@ -24,6 +25,7 @@ export function Layout() {
       '/files': 'Files - Singularity',
       '/outputs': 'Outputs - Singularity',
       '/history': 'History - Singularity',
+      '/usage': 'Usage - Singularity',
     };
     // Find matching title (handle nested routes like /files/config/SOUL.md)
     const basePath = '/' + location.pathname.split('/')[1];

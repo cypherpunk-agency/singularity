@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Message, AgentStatus, FileInfo, AgentOutput, AgentSession } from '@singularity/shared';
 import * as api from './lib/api';
+import type { UsageSummary } from './lib/api';
 
 interface AppState {
   // Status
@@ -29,6 +30,11 @@ interface AppState {
   sessions: AgentSession[];
   sessionsLoading: boolean;
 
+  // Usage
+  usageToday: UsageSummary | null;
+  usageMonth: UsageSummary | null;
+  usageLoading: boolean;
+
   // Actions
   fetchStatus: () => Promise<void>;
   fetchHistory: () => Promise<void>;
@@ -41,6 +47,7 @@ interface AppState {
   fetchOutputs: () => Promise<void>;
   fetchSessions: () => Promise<void>;
   setAgentProcessing: (processing: boolean, runId?: string | null) => void;
+  fetchUsage: () => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, _get) => ({
@@ -61,6 +68,9 @@ export const useStore = create<AppState>((set, _get) => ({
   outputsLoading: false,
   sessions: [],
   sessionsLoading: false,
+  usageToday: null,
+  usageMonth: null,
+  usageLoading: false,
 
   // Actions
   fetchStatus: async () => {
@@ -171,5 +181,19 @@ export const useStore = create<AppState>((set, _get) => ({
 
   setAgentProcessing: (processing, runId = null) => {
     set({ agentProcessing: processing, currentRunId: runId });
+  },
+
+  fetchUsage: async () => {
+    set({ usageLoading: true });
+    try {
+      const [usageToday, usageMonth] = await Promise.all([
+        api.getUsageToday(),
+        api.getUsageMonth(),
+      ]);
+      set({ usageToday, usageMonth, usageLoading: false });
+    } catch (error) {
+      console.error('Failed to fetch usage:', error);
+      set({ usageLoading: false });
+    }
   },
 }));

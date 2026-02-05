@@ -24,6 +24,9 @@ services:
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5001
       # TTS service (for voice responses)
       - TTS_SERVICE_URL=http://tts:8880
+      # OpenAI API (for Whisper transcription)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-auto}
       # Telegram (optional) - loaded from env_file
 
     ports:

@@ -92,3 +92,30 @@ export async function getSessions(limit?: number): Promise<{ sessions: AgentSess
 export async function getSession(id: string): Promise<AgentSession & { inputContent?: string; outputContent?: string }> {
   return fetchJson(`${API_BASE}/sessions/${id}`);
 }
+
+// Usage
+export interface UsageSummary {
+  totalCost: number;
+  totalRequests: number;
+  byService: Record<string, { cost: number; requests: number }>;
+  entries: UsageEntry[];
+}
+
+export interface UsageEntry {
+  timestamp: string;
+  provider: string;
+  service: string;
+  model: string;
+  inputUnits: number;
+  estimatedCost: number;
+  status: 'success' | 'error';
+  metadata?: string;
+}
+
+export async function getUsageToday(): Promise<UsageSummary> {
+  return fetchJson(`${API_BASE}/usage/today`);
+}
+
+export async function getUsageMonth(): Promise<UsageSummary> {
+  return fetchJson(`${API_BASE}/usage/month`);
+}

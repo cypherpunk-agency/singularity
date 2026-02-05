@@ -7,6 +7,7 @@ import { InterviewPrep } from './components/InterviewPrep';
 import { Files } from './components/Files';
 import { Outputs } from './components/Outputs';
 import { History } from './components/History';
+import { UsageDashboard } from './components/UsageDashboard';
 
 const routes: RouteObject[] = [
   {
@@ -25,6 +26,7 @@ const routes: RouteObject[] = [
           { path: 'outputs', element: <Outputs /> },
           { path: 'outputs/:sessionId', element: <Outputs /> },
           { path: 'history', element: <History /> },
+          { path: 'usage', element: <UsageDashboard /> },
         ],
       },
     ],

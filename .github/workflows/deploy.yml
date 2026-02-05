@@ -83,8 +83,5 @@ jobs:
 
       - name: Deploy to GCP
         run: |
-          gcloud compute ssh singularity --zone=europe-north1-a --command='
-            cd /opt/singularity && \
-            docker-compose -f docker/docker-compose.prod.yml pull && \
-            docker-compose -f docker/docker-compose.prod.yml up -d
-          '
+          gcloud compute ssh web-server --zone=us-central1-a --tunnel-through-iap \
+            --command="sudo /usr/local/bin/deploy-service singularity"

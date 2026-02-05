@@ -1,9 +1,8 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
 import { TELEGRAM_COMMANDS } from '@singularity/shared';
 import { WSManager } from '../ws/events.js';
-import { saveHumanMessage, getRecentConversation } from '../conversation.js';
+import { saveHumanMessage } from '../conversation.js';
 import { triggerAgentRun } from '../utils/agent.js';
-import { queueManager } from '../queue/manager.js';
 import { queueWorker } from '../queue/worker.js';
 import { transcribe } from '../services/transcription.js';
 import { synthesize } from '../services/tts.js';
@@ -41,59 +40,18 @@ export async function startTelegramBot(wsManager: WSManager): Promise<void> {
       await ctx.reply('Unauthorized. Your chat ID: ' + ctx.chat.id);
       return;
     }
-    await ctx.reply('Singularity Control Bot\n\nCommands:\n/status - Agent status\n/history - Recent conversation\n/run - Trigger agent run\n/help - Show help');
+    await ctx.reply('Singularity Control Bot\n\nCommands:\n/schedule - Today\'s schedule\n/run - Trigger agent run\n/help - Show help');
   });
 
   bot.command('help', async (ctx) => {
     if (!isAuthorized(ctx)) return;
     await ctx.reply(`Available commands:
-${TELEGRAM_COMMANDS.STATUS} - Current agent status
-${TELEGRAM_COMMANDS.HISTORY} - Recent conversation summary
+${TELEGRAM_COMMANDS.SCHEDULE} - Today's and tomorrow's schedule
 ${TELEGRAM_COMMANDS.SEARCH} <query> - Search memory/files
 ${TELEGRAM_COMMANDS.RUN} - Trigger immediate agent run
 ${TELEGRAM_COMMANDS.SETTINGS} - Output settings (text/voice)
 
 Or just send any text to chat with the agent.`);
-  });
-
-  bot.command('status', async (ctx) => {
-    if (!isAuthorized(ctx)) return;
-
-    try {
-      const status = await getAgentStatus();
-      await ctx.reply(
-        `Agent Status: ${status.status}\n` +
-        `Session: ${status.sessionId || 'unknown'}\n` +
-        `Last Run: ${status.lastRun || 'never'}\n` +
-        `Last Run Success: ${status.lastRunSuccess ?? 'N/A'}\n` +
-        `Next Scheduled: ${status.nextScheduledRun || 'unknown'}`
-      );
-    } catch (error) {
-      await ctx.reply('Failed to get status: ' + error);
-    }
-  });
-
-  bot.command('history', async (ctx) => {
-    if (!isAuthorized(ctx)) return;
-
-    try {
-      // Get telegram conversation history
-      const messages = await getRecentConversation('telegram', 3);
-      if (messages.length === 0) {
-        await ctx.reply('No recent Telegram conversation history.');
-        return;
-      }
-
-      const summary = messages.slice(-10).map(m => {
-        const from = m.from === 'human' ? 'You' : 'Agent';
-        const text = m.text.length > 100 ? m.text.substring(0, 100) + '...' : m.text;
-        return `[${from}] ${text}`;
-      }).join('\n\n');
-
-      await ctx.reply(`Recent conversation:\n\n${summary}`);
-    } catch (error) {
-      await ctx.reply('Failed to get history: ' + error);
-    }
   });
 
   bot.command('search', async (ctx) => {
@@ -135,6 +93,43 @@ Or just send any text to chat with the agent.`);
       await ctx.reply('Output Mode:', { reply_markup: keyboard });
     } catch (error) {
       await ctx.reply('Failed to load settings: ' + error);
+    }
+  });
+
+  bot.command('schedule', async (ctx) => {
+    if (!isAuthorized(ctx)) return;
+
+    try {
+      const basePath = getBasePath();
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
+      const todayFile = path.join(basePath, 'agent/operations/tommi-daily-plan', `${formatDate(today)}.md`);
+      const tomorrowFile = path.join(basePath, 'agent/operations/tommi-daily-plan', `${formatDate(tomorrow)}.md`);
+
+      let response = '';
+
+      // Today's schedule
+      try {
+        const todayPlan = await fs.readFile(todayFile, 'utf-8');
+        response += `<b>📅 Today (${formatDate(today)})</b>\n\n${extractSchedule(todayPlan)}\n\n`;
+      } catch {
+        response += `<b>📅 Today</b>\nNo plan found.\n\n`;
+      }
+
+      // Tomorrow's schedule
+      try {
+        const tomorrowPlan = await fs.readFile(tomorrowFile, 'utf-8');
+        response += `<b>📆 Tomorrow (${formatDate(tomorrow)})</b>\n\n${extractSchedule(tomorrowPlan)}`;
+      } catch {
+        response += `<b>📆 Tomorrow</b>\nNo plan found.`;
+      }
+
+      await ctx.reply(response, { parse_mode: 'HTML' });
+    } catch (error) {
+      await ctx.reply('Failed to get schedule: ' + error);
     }
   });
 
@@ -276,50 +271,6 @@ function stopTypingIndicator(chatId: string): void {
   }
 }
 
-async function getAgentStatus() {
-  const basePath = getBasePath();
-
-  let sessionId: string | null = null;
-  try {
-    sessionId = (await fs.readFile(path.join(basePath, 'state', 'session-id.txt'), 'utf-8')).trim();
-  } catch {
-    // No session file
-  }
-
-  let lastRun: { timestamp: string; exit_code: number } | null = null;
-  try {
-    const historyPath = path.join(basePath, 'state', 'run-history.jsonl');
-    const content = await fs.readFile(historyPath, 'utf-8');
-    const lines = content.trim().split('\n').filter(l => l.trim());
-    if (lines.length > 0) {
-      lastRun = JSON.parse(lines[lines.length - 1]);
-    }
-  } catch {
-    // No history file
-  }
-
-  // Check queue for processing status
-  const processingRun = await queueManager.getProcessing();
-  const pendingRuns = await queueManager.getPending();
-  const status: 'idle' | 'running' | 'error' = processingRun ? 'running' : 'idle';
-
-  const now = new Date();
-  const nextHour = new Date(now);
-  nextHour.setMinutes(0);
-  nextHour.setSeconds(0);
-  nextHour.setMilliseconds(0);
-  nextHour.setHours(nextHour.getHours() + 1);
-
-  return {
-    status,
-    lastRun: lastRun?.timestamp || null,
-    lastRunSuccess: lastRun ? lastRun.exit_code === 0 : null,
-    sessionId,
-    nextScheduledRun: nextHour.toISOString(),
-    pendingCount: pendingRuns.length,
-  };
-}
-
 /**
  * Send a message to Telegram (called when agent responds via /api/chat/respond)
  * @param htmlText - HTML-formatted text for text messages
@@ -367,6 +318,31 @@ export async function sendToTelegram(htmlText: string, plainText?: string): Prom
 }
 
 /**
+ * Extract schedule table from daily plan markdown
+ */
+function extractSchedule(markdown: string): string {
+  // Extract the Schedule section table
+  const scheduleMatch = markdown.match(/## Schedule\n([\s\S]*?)(?=\n##|$)/);
+  if (!scheduleMatch) return 'No schedule section found.';
+
+  // Parse and format the table for Telegram
+  const lines = scheduleMatch[1].trim().split('\n').filter(l => l.startsWith('|'));
+  if (lines.length <= 2) return 'No tasks scheduled.';
+
+  // Skip header and separator, format tasks
+  return lines.slice(2).map(line => {
+    const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cols.length >= 2) {
+      const time = cols[0];
+      const task = cols[1];
+      const pri = cols[2] || '';
+      return `${time} - ${task}${pri ? ` [${pri}]` : ''}`;
+    }
+    return line;
+  }).join('\n');
+}
+
+/**
  * Strip HTML tags and convert back to markdown-ish plain text
  * Used as fallback when Telegram rejects malformed HTML
  */
@@ -394,8 +370,7 @@ async function registerBotCommands(): Promise<void> {
 
   try {
     await bot.api.setMyCommands([
-      { command: 'status', description: 'Show agent status' },
-      { command: 'history', description: 'Recent conversation' },
+      { command: 'schedule', description: "Today's and tomorrow's schedule" },
       { command: 'run', description: 'Trigger agent run' },
       { command: 'settings', description: 'Output settings' },
       { command: 'help', description: 'Show commands' },

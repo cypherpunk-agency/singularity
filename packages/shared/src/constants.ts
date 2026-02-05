@@ -88,10 +88,9 @@ export const WATCH_CONFIG = {
 
 // Telegram commands
 export const TELEGRAM_COMMANDS = {
-  STATUS: '/status',
-  HISTORY: '/history',
   SEARCH: '/search',
   RUN: '/run',
   SETTINGS: '/settings',
+  SCHEDULE: '/schedule',
   HELP: '/help',
 } as const;

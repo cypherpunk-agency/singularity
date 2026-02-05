@@ -1,7 +1,7 @@
 - read @README.md
 - read @agent/context/SOUL.md
 - read @agent/context/SYSTEM.md
-- read @agent/context/OPERATIONS.md
+- read @agent/operations/OPERATIONS.md
 - the repo is also mounted in the container,
   - develop locally
   - build in the container (local builds won't be served - the container serves its own dist/)
@@ -9,3 +9,4 @@
   - in most cases we don't need to rebuild the image
 - always use `-u agent` when running `docker exec` to avoid creating root-owned files in the mounted volume (e.g., `docker exec -u agent singularity-agent npm run build`)
 - don't use --no-cache for docker build unless the user allows it
+- use `--env-file .env` with docker-compose commands (e.g., `docker-compose -f docker/docker-compose.yml --env-file .env up -d`) since variable substitution looks for .env relative to compose file, not cwd

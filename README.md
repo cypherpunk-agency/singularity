@@ -130,9 +130,9 @@ The agent uses per-channel sessions with cross-session memory:
 
 | Context Type | System Prompt | History | Shared Memory |
 |--------------|---------------|---------|---------------|
-| Web chat | SOUL.md + CONVERSATION.md + WEB.md* | conversation/web/ | operations/MEMORY.md |
-| Telegram | SOUL.md + CONVERSATION.md + TELEGRAM.md* | conversation/telegram/ | operations/MEMORY.md |
-| Cron | SOUL.md + HEARTBEAT.md | None | operations/MEMORY.md |
+| Web chat | SOUL + SYSTEM + timestamp + OPERATIONS + CONVERSATION + WEB* | conversation/web/ | MEMORY.md |
+| Telegram | SOUL + SYSTEM + timestamp + OPERATIONS + CONVERSATION + TELEGRAM* | conversation/telegram/ | MEMORY.md |
+| Cron | SOUL + SYSTEM + timestamp + OPERATIONS + HEARTBEAT | None | MEMORY.md |
 
 *Channel-specific config files (WEB.md, TELEGRAM.md) are optional and loaded if present.
 

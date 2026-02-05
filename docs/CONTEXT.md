@@ -13,11 +13,14 @@ The context preparation system intelligently assembles context for agent runs, u
 │  Inputs:                      │  Context Assembly:                   │
 │  ┌─────────────────────────┐  │  ┌─────────────────────────────┐    │
 │  │ type: chat | cron       │  │  │ 1. SOUL.md (always)         │    │
-│  │ channel: web | telegram │  │  │ 2. CONVERSATION.md/HEARTBEAT│    │
-│  │ query: last user message│──┼─►│ 3. Conversation history     │    │
-│  └─────────────────────────┘  │  │ 4. Relevant memory snippets │    │
-│                               │  │ 5. PROJECTS.md               │    │
-│  Token Budget: ~8000 tokens   │  └─────────────────────────────┘    │
+│  │ channel: web | telegram │  │  │ 2. SYSTEM.md (always)       │    │
+│  │ query: last user message│──┼─►│ 3. Current timestamp        │    │
+│  └─────────────────────────┘  │  │ 4. OPERATIONS.md (always)   │    │
+│                               │  │ 5. PROJECTS.md              │    │
+│  Token Budget: ~8000 tokens   │  │ 6. Relevant memory snippets │    │
+│                               │  │ 7. CONVERSATION/HEARTBEAT   │    │
+│                               │  │ 8. Conversation history     │    │
+│                               │  └─────────────────────────────┘    │
 │                               │                                      │
 └───────────────────────────────┴──────────────────────────────────────┘
                                        │
@@ -39,11 +42,14 @@ The context preparation system intelligently assembles context for agent runs, u
 | Component | Priority | Default Budget | Notes |
 |-----------|----------|----------------|-------|
 | SOUL.md | Required | ~500 tokens | Core identity |
+| SYSTEM.md | Required | ~200 tokens | System overview |
+| Timestamp | Required | ~20 tokens | Current date/time |
+| OPERATIONS.md | Required | ~400 tokens | Task coordination |
+| PROJECTS.md | Medium | ~500 tokens | Projects directory |
+| Relevant Memory | Medium | ~1500 tokens | Vector search results |
 | CONVERSATION/HEARTBEAT.md | Required | ~300 tokens | Mode instructions |
 | Conversation History | High | ~2000 tokens | Last 20-30 messages |
-| Relevant Memory | Medium | ~1500 tokens | Vector search results |
-| PROJECTS.md | Medium | ~500 tokens | Projects directory |
-| **Total** | | **~5300** | Buffer for response |
+| **Total** | | **~5420** | Buffer for response |
 
 ## API Reference
 

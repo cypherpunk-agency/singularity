@@ -183,6 +183,20 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     metadata.components.soul += systemTokens; // Count with soul
   }
 
+  // 2.5. Current timestamp (helps Claude with date/weekday accuracy)
+  const now = new Date();
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Helsinki'
+  });
+  const timestampLine = `**Current Time:** It is ${weekday}, ${dateStr} ${timeStr} CET`;
+  parts.push(timestampLine);
+  usedTokens += estimateTokens(timestampLine);
+
   // 3. OPERATIONS.md (always included)
   const operations = await readFileSafe(path.join(basePath, 'agent', 'context', 'OPERATIONS.md'));
   if (operations) {

@@ -45,10 +45,6 @@ RUN mkdir -p /app/agent/memory \
 COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
-# Copy context files (agent can modify these now)
-COPY agent/context/ /app/agent/context/
-RUN chown -R agent:agent /app/agent/context
-
 # Copy crontab
 COPY docker/crontab /etc/cron.d/agent-cron
 RUN chmod 0644 /etc/cron.d/agent-cron \

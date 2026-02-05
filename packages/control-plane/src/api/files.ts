@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { FileInfo, FileContent, SearchResponse } from '@singularity/shared';
+import { vectorSearch } from '../services/vector-client.js';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
@@ -10,11 +11,6 @@ function getBasePath(): string {
 
 function getAgentDir(): string {
   return path.join(getBasePath(), 'agent');
-}
-
-// Vector service URL (from environment or default)
-function getVectorServiceUrl(): string {
-  return process.env.VECTOR_SERVICE_URL || 'http://vector:5000';
 }
 
 // Recursively list all .md files in a directory
@@ -99,8 +95,7 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      // Call the vector search service via HTTP
-      const results = await runVectorSearch(query, parseInt(limit));
+      const results = await vectorSearch(query, parseInt(limit));
       return { results, query };
     } catch (error) {
       fastify.log.error(error, 'Search failed');
@@ -163,30 +158,4 @@ export async function registerFilesRoutes(fastify: FastifyInstance) {
       reply.code(500).send({ success: false, path: filePath });
     }
   });
-}
-
-async function runVectorSearch(query: string, limit: number): Promise<{ file: string; content: string; score: number }[]> {
-  const vectorUrl = getVectorServiceUrl();
-  const url = `${vectorUrl}/search?q=${encodeURIComponent(query)}&limit=${limit}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Vector service returned ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as { results: { file: string; content: string; score: number }[]; query: string };
-    return data.results || [];
-  } catch (error) {
-    // Vector service unavailable - return empty results
-    // This allows the control plane to work even without the vector service
-    console.error('Vector search failed:', error);
-    return [];
-  }
 }

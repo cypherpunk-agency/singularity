@@ -14,6 +14,7 @@ import { registerInterviewProxyRoutes } from './api/interview-proxy.js';
 import { registerJobsProxyRoutes } from './api/jobs-proxy.js';
 import { registerTelegramFilesRoutes } from './api/telegram-files.js';
 import { registerUsageRoutes } from './api/usage.js';
+import { getVectorServiceStatus } from './services/vector-client.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
 import { startTelegramBot } from './channels/telegram.js';
@@ -71,7 +72,12 @@ async function main() {
 
   // Health check
   fastify.get('/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+    const vectorStatus = await getVectorServiceStatus();
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      services: { vector: vectorStatus },
+    };
   });
 
   // Setup WebSocket first (before routes)

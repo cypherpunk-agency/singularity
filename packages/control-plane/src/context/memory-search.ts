@@ -4,8 +4,7 @@
  */
 
 import { estimateTokens } from './tokens.js';
-
-const VECTOR_SERVICE_URL = process.env.VECTOR_SERVICE_URL || 'http://vector:5000';
+import { vectorSearch, isVectorServiceAvailable as checkVectorAvailable } from '../services/vector-client.js';
 
 export interface MemorySource {
   file: string;
@@ -17,15 +16,6 @@ export interface MemorySearchResult {
   content: string;
   tokenEstimate: number;
   sources: MemorySource[];
-}
-
-interface VectorSearchResponse {
-  results: Array<{
-    file: string;
-    content: string;
-    score: number;
-  }>;
-  query: string;
 }
 
 /**
@@ -47,17 +37,7 @@ export async function searchMemory(query: string, options: {
   const { maxResults = 5, maxTokens = 1500 } = options;
 
   try {
-    const response = await fetch(
-      `${VECTOR_SERVICE_URL}/search?q=${encodeURIComponent(query)}&limit=${maxResults}`
-    );
-
-    if (!response.ok) {
-      console.error('Vector search returned non-OK status:', response.status);
-      return { content: '', tokenEstimate: 0, sources: [] };
-    }
-
-    const data = await response.json() as VectorSearchResponse;
-    const results = data.results || [];
+    const results = await vectorSearch(query, maxResults);
 
     // Deduplicate and format results
     let content = '';
@@ -100,12 +80,5 @@ export async function searchMemory(query: string, options: {
  * Check if vector service is available
  */
 export async function isVectorServiceAvailable(): Promise<boolean> {
-  try {
-    const response = await fetch(`${VECTOR_SERVICE_URL}/health`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  return checkVectorAvailable();
 }

@@ -204,20 +204,13 @@ def do_index_all() -> dict:
             files_indexed.append("MEMORY.md")
             indexed += 1
 
-    # Index daily logs
+    # Index all memory files recursively
     if MEMORY_DIR.exists():
-        for log_file in MEMORY_DIR.glob("*.md"):
-            if index_file(conn, log_file):
-                files_indexed.append(f"memory/{log_file.name}")
+        for md_file in MEMORY_DIR.glob("**/*.md"):
+            rel_path = md_file.relative_to(AGENT_DIR)
+            if index_file(conn, md_file):
+                files_indexed.append(str(rel_path).replace("\\", "/"))
                 indexed += 1
-
-        # Index archived logs
-        archive_dir = MEMORY_DIR / "archive"
-        if archive_dir.exists():
-            for log_file in archive_dir.glob("*.md"):
-                if index_file(conn, log_file):
-                    files_indexed.append(f"memory/archive/{log_file.name}")
-                    indexed += 1
 
     conn.close()
 

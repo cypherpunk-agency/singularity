@@ -35,3 +35,4 @@ See `.env.example` for the full list. Critical ones:
 - `TELEGRAM_BOT_TOKEN` - For Telegram integration
 - `TELEGRAM_CHAT_ID` - Your Telegram chat ID
 - `OPENAI_API_KEY` - For Whisper transcription
+- `CONTROL_PLANE_TOKEN` - Optional API auth token

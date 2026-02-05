@@ -193,7 +193,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
   }
 
   // 4. PROJECTS.md (always included)
-  const projects = await readFileSafe(path.join(basePath, 'agent', 'PROJECTS.md'));
+  const projects = await readFileSafe(path.join(basePath, 'agent', 'operations', 'PROJECTS.md'));
   if (projects) {
     parts.push(`## Projects Directory\n${projects}`);
     const tokens = estimateTokens(projects);
@@ -220,7 +220,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       }
     } else {
       // Fallback: include full MEMORY.md if vector search unavailable
-      const memory = await readFileSafe(path.join(basePath, 'agent', 'MEMORY.md'));
+      const memory = await readFileSafe(path.join(basePath, 'agent', 'operations', 'MEMORY.md'));
       if (memory) {
         parts.push(`## Cross-Session Memory\n${memory}`);
         const tokens = estimateTokens(memory);
@@ -230,7 +230,7 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     }
   } else {
     // No query provided - include full MEMORY.md
-    const memory = await readFileSafe(path.join(basePath, 'agent', 'MEMORY.md'));
+    const memory = await readFileSafe(path.join(basePath, 'agent', 'operations', 'MEMORY.md'));
     if (memory) {
       parts.push(`## Cross-Session Memory\n${memory}`);
       const tokens = estimateTokens(memory);

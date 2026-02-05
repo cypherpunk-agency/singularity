@@ -99,8 +99,8 @@ Each file contains:
 ## Cross-Session Memory
 [MEMORY.md content]
 
-## Current Tasks
-[TASKS.md content]
+## Current Queue
+[SINGULARITY_QUEUE.md content]
 
 ## User Prompt
 Process the incoming message and respond via the API.

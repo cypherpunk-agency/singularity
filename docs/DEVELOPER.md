@@ -44,7 +44,7 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Shared Cross-Session Context                 │
-│    agent/context/SOUL.md, agent/MEMORY.md, agent/TASKS.md        │
+│  agent/context/SOUL.md, MEMORY.md, SINGULARITY_QUEUE.md          │
 └─────────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -62,9 +62,9 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 
 | Context Type | System Prompt | History | Shared Memory |
 |--------------|---------------|---------|---------------|
-| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, TASKS.md |
-| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, TASKS.md |
-| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, TASKS.md |
+| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, SINGULARITY_QUEUE.md |
+| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, SINGULARITY_QUEUE.md |
+| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, SINGULARITY_QUEUE.md |
 
 ## API Reference
 
@@ -76,7 +76,7 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 | `GET /api/chat/history/:date` | `api/chat.ts` | Query: `channel` |
 | `GET /api/files` | `api/files.ts` | Lists VIEWABLE_FILES + memory/*.md |
 | `GET /api/files/*` | `api/files.ts` | Read file (path traversal check) |
-| `PUT /api/files/*` | `api/files.ts` | Update file (blocks TASKS.md) |
+| `PUT /api/files/*` | `api/files.ts` | Update file (blocks queue files) |
 | `GET /api/files/search` | `api/files.ts` | Vector search via memory-search.py |
 | `GET /api/status` | `api/agent.ts` | Lock file check, next run calc |
 | `POST /api/agent/run` | `api/agent.ts` | Body: `{type, channel, prompt}` |
@@ -166,7 +166,7 @@ The system uses a **message-centric model** for chat runs:
 
 - **Per-channel conversations**: `conversation.ts` - separate directories for web/telegram
 - **Path security**: `api/files.ts` - normalize + startsWith check
-- **TASKS.md protected**: `api/files.ts` - write blocked
+- **Queue files protected**: `api/files.ts` - write blocked
 - **Message-centric chat runs**: `queue/worker.ts` - polls for unprocessed messages, batches into ONE run
 - **Queue-based cron runs**: `queue/worker.ts` - cron runs use traditional queue
 - **Message priority**: Chat messages always processed before queued cron runs

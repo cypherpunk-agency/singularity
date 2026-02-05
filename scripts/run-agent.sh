@@ -122,19 +122,19 @@ $(cat "${CONFIG_DIR}/OPERATIONS.md")"
     fi
 
     # 4. PROJECTS.md (always)
-    if [ -f "${AGENT_DIR}/PROJECTS.md" ]; then
+    if [ -f "${AGENT_DIR}/operations/PROJECTS.md" ]; then
         prompt="${prompt}
 
 ## Projects Directory
-$(cat "${AGENT_DIR}/PROJECTS.md")"
+$(cat "${AGENT_DIR}/operations/PROJECTS.md")"
     fi
 
     # 5. MEMORY.md (always)
-    if [ -f "${AGENT_DIR}/MEMORY.md" ]; then
+    if [ -f "${AGENT_DIR}/operations/MEMORY.md" ]; then
         prompt="${prompt}
 
 ## Cross-Session Memory
-$(cat "${AGENT_DIR}/MEMORY.md")"
+$(cat "${AGENT_DIR}/operations/MEMORY.md")"
     fi
 
     # 6. Mode-specific instructions

@@ -27,7 +27,7 @@ A containerized autonomous agent using Claude Code CLI headless mode, with a web
 
 5. **Access the Control Center** at http://localhost:3001
 
-6. **Chat with the agent** via the web UI or add tasks to `agent/TASKS.md`
+6. **Chat with the agent** via the web UI (tasks are managed in `agent/operations/SINGULARITY_QUEUE.md`)
 
 ## Control Center
 
@@ -93,18 +93,23 @@ cat logs/heartbeat.log
 
 ```
 agent/
-├── PROJECTS.md       # Project directory (~200 lines)
-├── MEMORY.md         # Long-term curated memory (cross-session)
-├── context/          # Agent context files (mutable)
-│   ├── SOUL.md       # Core identity (all contexts)
-│   ├── CONVERSATION.md # Chat-specific instructions
-│   ├── TELEGRAM.md   # Telegram-specific instructions (optional)
-│   ├── WEB.md        # Web-specific instructions (optional)
-│   ├── HEARTBEAT.md  # Cron-specific instructions + heartbeat tasks
-│   └── TOOLS.md      # Agent tools documentation
-├── memory/           # Daily activity logs
-│   └── YYYY-MM-DD.md
-└── conversation/     # Per-channel chat history
+├── context/              # Identity & mode instructions
+│   ├── SOUL.md           # Core identity (all contexts)
+│   ├── SYSTEM.md         # System overview
+│   ├── OPERATIONS.md     # Task coordination (describes operations/)
+│   ├── CONVERSATION.md   # Chat-specific instructions
+│   ├── HEARTBEAT.md      # Cron-specific instructions
+│   ├── TELEGRAM.md       # Telegram-specific (optional)
+│   └── WEB.md            # Web-specific (optional)
+├── operations/           # Operational files
+│   ├── MEMORY.md         # Long-term curated memory
+│   ├── PROJECTS.md       # Project directory (~200 lines)
+│   ├── SINGULARITY_QUEUE.md  # Execution queue
+│   ├── TOMMI_QUEUE.md    # Checkpoint queue
+│   ├── initiatives/      # Nightly initiative system
+│   └── scheduled/        # Scheduled task instructions
+├── memory/               # Detailed knowledge files
+└── conversation/         # Per-channel chat history
     ├── web/
     │   └── YYYY-MM-DD.jsonl
     └── telegram/
@@ -125,17 +130,17 @@ The agent uses per-channel sessions with cross-session memory:
 
 | Context Type | System Prompt | History | Shared Memory |
 |--------------|---------------|---------|---------------|
-| Web chat | SOUL.md + CONVERSATION.md + WEB.md* | conversation/web/ | MEMORY.md, TASKS.md |
-| Telegram | SOUL.md + CONVERSATION.md + TELEGRAM.md* | conversation/telegram/ | MEMORY.md, TASKS.md |
-| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, TASKS.md |
+| Web chat | SOUL.md + CONVERSATION.md + WEB.md* | conversation/web/ | operations/MEMORY.md |
+| Telegram | SOUL.md + CONVERSATION.md + TELEGRAM.md* | conversation/telegram/ | operations/MEMORY.md |
+| Cron | SOUL.md + HEARTBEAT.md | None | operations/MEMORY.md |
 
 *Channel-specific config files (WEB.md, TELEGRAM.md) are optional and loaded if present.
 
-All contexts share `MEMORY.md` and `TASKS.md` for cross-session continuity.
+All contexts share `operations/MEMORY.md` and the dual-queue system (`operations/SINGULARITY_QUEUE.md`, `operations/TOMMI_QUEUE.md`) for cross-session continuity.
 
 ### Interaction Model
 
-- **Agent is autonomous**: Manages tasks in TASKS.md, guided by HEARTBEAT.md
+- **Agent is autonomous**: Manages tasks via dual-queue system, guided by HEARTBEAT.md
 - **Agent runs on-demand** when messages arrive (also hourly via cron as fallback)
 - **Human communicates via chat** (Web UI or Telegram)
 - **Messages are the queue**: Saved to JSONL, worker polls for unprocessed messages
@@ -170,7 +175,7 @@ The system uses two containers for faster builds:
 │  │                    │         │ hourly cron│ │                    │
 │  │          ┌─────────▼─────────┴────────────┘ │                    │
 │  │          │         File System              │                    │
-│  │          │  conversation/, TASKS.md, etc.   │                    │
+│  │          │  conversation/, queues, etc.      │                    │
 │  │          └──────────────────────────────────┘                    │
 │  └─────────────────────────────────────────────┘                    │
 └─────────────────────────────────────────────────────────────────────┘

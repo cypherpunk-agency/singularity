@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useStore } from '../store';
 import { format } from 'date-fns';
 import clsx from 'clsx';
@@ -203,8 +204,8 @@ export function Outputs() {
                       Input ({sessionDetails.inputFile?.split('/').pop()})
                     </summary>
                     <div className="p-4 bg-slate-900">
-                      <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300">
-                        <Markdown>{sessionDetails.inputContent}</Markdown>
+                      <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300 prose-table:border-collapse prose-th:border prose-th:border-slate-600 prose-th:bg-slate-800 prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-slate-600 prose-td:px-3 prose-td:py-2">
+                        <Markdown remarkPlugins={[remarkGfm]}>{sessionDetails.inputContent}</Markdown>
                       </div>
                     </div>
                   </details>
@@ -219,8 +220,8 @@ export function Outputs() {
                       Output ({sessionDetails.outputFile?.split('/').pop()})
                     </summary>
                     <div className="p-4 bg-slate-900">
-                      <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300">
-                        <Markdown>{sessionDetails.outputContent}</Markdown>
+                      <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300 prose-table:border-collapse prose-th:border prose-th:border-slate-600 prose-th:bg-slate-800 prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-slate-600 prose-td:px-3 prose-td:py-2">
+                        <Markdown remarkPlugins={[remarkGfm]}>{sessionDetails.outputContent}</Markdown>
                       </div>
                     </div>
                   </details>

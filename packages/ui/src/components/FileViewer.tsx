@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 import { useStore } from '../store';
 import * as api from '../lib/api';
@@ -130,8 +131,8 @@ export function FileViewer() {
             )}
           />
         ) : selectedFile?.endsWith('.md') ? (
-          <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300">
-            <Markdown>{fileContent || ''}</Markdown>
+          <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-300 prose-strong:text-white prose-code:text-primary-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-a:text-primary-400 prose-li:text-slate-300 prose-table:border-collapse prose-th:border prose-th:border-slate-600 prose-th:bg-slate-800 prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-slate-600 prose-td:px-3 prose-td:py-2">
+            <Markdown remarkPlugins={[remarkGfm]}>{fileContent || ''}</Markdown>
           </div>
         ) : (
           <pre className="text-slate-100 font-mono text-sm whitespace-pre-wrap">

@@ -134,9 +134,13 @@ export const useStore = create<AppState>((set, _get) => ({
   },
 
   addMessage: (message) => {
-    set((state) => ({
-      messages: [...state.messages, message],
-    }));
+    set((state) => {
+      // Deduplicate by message ID to prevent duplicates from multiple WebSocket connections
+      if (state.messages.some(m => m.id === message.id)) {
+        return state;
+      }
+      return { messages: [...state.messages, message] };
+    });
   },
 
   updateStatus: (status) => {

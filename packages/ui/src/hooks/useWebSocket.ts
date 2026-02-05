@@ -133,6 +133,7 @@ export function useWebSocket() {
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
+        wsRef.current.onclose = null;  // Prevent reconnect scheduling during cleanup
         wsRef.current.close();
       }
     };

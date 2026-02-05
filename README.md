@@ -27,7 +27,7 @@ A containerized autonomous agent using Claude Code CLI headless mode, with a web
 
 5. **Access the Control Center** at http://localhost:3001
 
-6. **Chat with the agent** via the web UI (tasks are managed in `agent/operations/SINGULARITY_QUEUE.md`)
+6. **Chat with the agent** via the web UI (tasks are managed in `agent/operations/TASKS_SINGULARITY.md`)
 
 ## Control Center
 
@@ -39,6 +39,7 @@ The Control Center provides a web-based interface to interact with and monitor t
 - **File Browser**: View and edit agent files (HEARTBEAT.md, MEMORY.md, etc.)
 - **Output Viewer**: See results from agent runs
 - **Run History**: Track agent activity and costs
+- **Usage Dashboard**: Monitor API usage and costs (OpenAI Whisper, etc.)
 - **Real-time Updates**: WebSocket-powered live updates
 
 ### Access
@@ -61,7 +62,7 @@ The Control Center provides a web-based interface to interact with and monitor t
 
 **Interaction:**
 - Send a message and the bot will show "typing..." while processing
-- Voice messages are transcribed locally, then processed by the agent
+- Voice messages are transcribed (via OpenAI Whisper API or local GPU), then processed by the agent
 
 ## Manual Testing
 
@@ -96,16 +97,16 @@ agent/
 ├── context/              # Identity & mode instructions
 │   ├── SOUL.md           # Core identity (all contexts)
 │   ├── SYSTEM.md         # System overview
-│   ├── OPERATIONS.md     # Task coordination (describes operations/)
 │   ├── CONVERSATION.md   # Chat-specific instructions
 │   ├── HEARTBEAT.md      # Cron-specific instructions
 │   ├── TELEGRAM.md       # Telegram-specific (optional)
 │   └── WEB.md            # Web-specific (optional)
 ├── operations/           # Operational files
+│   ├── OPERATIONS.md     # Task coordination (describes operations/)
 │   ├── MEMORY.md         # Long-term curated memory
 │   ├── PROJECTS.md       # Project directory (~200 lines)
-│   ├── SINGULARITY_QUEUE.md  # Execution queue
-│   ├── TOMMI_QUEUE.md    # Checkpoint queue
+│   ├── TASKS_SINGULARITY.md  # Agent execution queue
+│   ├── TASKS_TOMMI.md    # Human tasks + checkpoints
 │   ├── initiatives/      # Nightly initiative system
 │   └── scheduled/        # Scheduled task instructions
 ├── memory/               # Detailed knowledge files
@@ -136,7 +137,7 @@ The agent uses per-channel sessions with cross-session memory:
 
 *Channel-specific config files (WEB.md, TELEGRAM.md) are optional and loaded if present.
 
-All contexts share `operations/MEMORY.md` and the dual-queue system (`operations/SINGULARITY_QUEUE.md`, `operations/TOMMI_QUEUE.md`) for cross-session continuity.
+All contexts share `operations/MEMORY.md` and the dual-queue system (`operations/TASKS_SINGULARITY.md`, `operations/TASKS_TOMMI.md`) for cross-session continuity.
 
 ### Interaction Model
 
@@ -233,6 +234,9 @@ See [docs/CONTEXT.md](docs/CONTEXT.md) for details on intelligent context prepar
 | `GET` | `/api/queue` | List pending runs |
 | `GET` | `/api/queue/status` | Current queue status (pending count, processing run) |
 | `GET` | `/api/queue/:id` | Get specific run status |
+| `GET` | `/api/usage/today` | Today's API usage summary |
+| `GET` | `/api/usage/month` | This month's API usage summary |
+| `GET` | `/api/usage/since/:date` | Usage since a specific date |
 | `ALL` | `/api/interview/*` | Proxy to Interview Prep API |
 | `ALL` | `/api/jobs-backend/*` | Proxy to Job Tracker API |
 
@@ -321,6 +325,8 @@ This prevents "ghost runs" where multiple messages would create duplicate sessio
 | `VECTOR_SERVICE_URL` | `http://vector:5000` | Vector search service URL |
 | `TELEGRAM_BOT_TOKEN` | (empty) | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | (empty) | Your Telegram chat ID |
+| `OPENAI_API_KEY` | (empty) | OpenAI API key for Whisper transcription |
+| `TRANSCRIPTION_PROVIDER` | `auto` | Transcription provider: `openai`, `local`, or `auto` |
 | `INTERVIEW_API_URL` | `http://localhost:3003` | Interview Prep API URL (proxied) |
 | `JOB_TRACKER_API_URL` | `http://localhost:3002` | Job Tracker API URL (proxied) |
 

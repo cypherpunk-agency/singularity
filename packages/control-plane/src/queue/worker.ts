@@ -4,12 +4,16 @@ import path from 'path';
 import { QueuedRun, Channel, Message, LockType } from '@singularity/shared';
 import { queueManager } from './manager.js';
 import { prepareContext } from '../context/index.js';
-import { getUnprocessedMessages, markMessagesAsProcessed } from '../conversation.js';
+import { getUnprocessedMessages, markMessagesAsProcessed, saveAgentResponse } from '../conversation.js';
 import { extractAndRouteResponse } from '../response/extractor.js';
 import { WSManager } from '../ws/events.js';
 
 // Configuration for stuck job recovery
 const AGENT_TIMEOUT_MS = parseInt(process.env.AGENT_TIMEOUT_MS || '1800000'); // 30 min default
+
+// Chat retry configuration to prevent infinite retry loops (OOM protection)
+const MAX_CHAT_RETRIES = 3;
+const CHAT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000]; // escalating backoff
 const STUCK_THRESHOLD_MS = AGENT_TIMEOUT_MS + 5 * 60 * 1000; // timeout + 5 min buffer
 const HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
 
@@ -126,6 +130,7 @@ export class QueueWorker {
     ['cron', false],
   ]);
   private currentProcesses: Map<LockType, ChildProcess> = new Map();
+  private channelRetries: Map<Channel, { count: number; messageIds: string[] }> = new Map();
   private wsManager: WSManager | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
   private healthInterval: NodeJS.Timeout | null = null;
@@ -288,19 +293,86 @@ export class QueueWorker {
       return;
     }
 
+    const messageIds = unprocessed.map(m => m.id);
+    const retryState = this.channelRetries.get(channel);
+
+    // Check if these are the same messages that already failed
+    const isSameMessages = retryState &&
+      retryState.messageIds.length === messageIds.length &&
+      retryState.messageIds.every(id => messageIds.includes(id));
+
+    if (isSameMessages && retryState!.count >= MAX_CHAT_RETRIES) {
+      console.error(`[QueueWorker] Max retries (${MAX_CHAT_RETRIES}) exceeded for ${channel}, giving up on ${messageIds.length} messages`);
+      await this.handleMaxRetriesExceeded(channel, messageIds);
+      this.channelRetries.delete(channel);
+      return;
+    }
+
+    // If same messages failing again, apply backoff delay
+    if (isSameMessages) {
+      const delayMs = CHAT_RETRY_DELAYS_MS[Math.min(retryState!.count, CHAT_RETRY_DELAYS_MS.length - 1)];
+      console.log(`[QueueWorker] Retry ${retryState!.count + 1}/${MAX_CHAT_RETRIES} for ${channel} after ${delayMs}ms backoff`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    } else if (retryState) {
+      // Different messages — reset retry counter
+      this.channelRetries.delete(channel);
+    }
+
     // Acquire lock
     this.processingLocks.set(channel, true);
 
     try {
       console.log(`[QueueWorker] Processing ${unprocessed.length} unprocessed messages from ${channel}`);
       await this.executeChatRun(channel, unprocessed);
+      // Success — clear retry state
+      this.channelRetries.delete(channel);
     } catch (error: any) {
       console.error(`[QueueWorker] Chat run failed for ${channel}: ${error.message}`);
-      // Don't mark messages as processed if run failed - they'll be retried
+      // Track retry state for these messages
+      const currentRetry = this.channelRetries.get(channel);
+      if (currentRetry && isSameMessages) {
+        currentRetry.count++;
+      } else {
+        this.channelRetries.set(channel, { count: 1, messageIds });
+      }
     } finally {
       this.processingLocks.set(channel, false);
-      // Check for more work on this channel
+      // Check for more work on this channel (retry logic above will gate retries)
       setImmediate(() => this.tryProcessChannel(channel));
+    }
+  }
+
+  /**
+   * Handle the case where chat messages have exceeded max retries.
+   * Marks them as processed and sends an error response to the user.
+   */
+  private async handleMaxRetriesExceeded(channel: Channel, messageIds: string[]): Promise<void> {
+    const errorText = 'Sorry, I encountered a persistent error processing your message(s). The issue has been logged. Please try sending your message again.';
+
+    try {
+      // Mark the stuck messages as processed so they don't block future messages
+      await markMessagesAsProcessed(channel, messageIds);
+      console.log(`[QueueWorker] Marked ${messageIds.length} failed messages as processed on ${channel}`);
+
+      // Save an error response to the conversation
+      const errorMessage = await saveAgentResponse(errorText, channel);
+
+      // Broadcast via WebSocket
+      if (this.wsManager) {
+        this.wsManager.broadcastChatMessage(errorMessage);
+      }
+
+      // Send to Telegram if applicable
+      if (channel === 'telegram') {
+        try {
+          const { sendToTelegram } = await import('../channels/telegram.js');
+          await sendToTelegram(errorText);
+        } catch (telegramError) {
+          console.error('[QueueWorker] Failed to send error to Telegram:', telegramError);
+        }
+      }
+    } catch (error) {
+      console.error('[QueueWorker] Failed to handle max retries exceeded:', error);
     }
   }
 

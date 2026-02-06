@@ -60,6 +60,15 @@ fi
 # Set up environment for cron jobs
 printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH|HOME)' > /etc/environment
 
+# Start SSH daemon
+if [ -f /home/agent/.ssh/authorized_keys ]; then
+    chmod 700 /home/agent/.ssh
+    chmod 600 /home/agent/.ssh/authorized_keys
+    chown -R agent:agent /home/agent/.ssh
+fi
+echo "[$(date -Iseconds)] Starting SSH daemon..."
+/usr/sbin/sshd
+
 # Start cron daemon
 echo "[$(date -Iseconds)] Starting cron daemon..."
 cron

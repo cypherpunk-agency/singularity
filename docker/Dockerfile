@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     sqlite3 \
     procps \
+    openssh-server \
     chromium \
     fonts-dejavu-core \
     fonts-liberation \
@@ -28,6 +29,12 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # Install pnpm
 RUN npm install -g pnpm@9
 
+# Configure sshd: key-only auth, no root login
+RUN mkdir -p /var/run/sshd && \
+    echo 'PermitRootLogin no' >> /etc/ssh/sshd_config && \
+    echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config && \
+    echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config
+
 # Create non-root agent user
 RUN useradd -m -s /bin/bash agent
 
@@ -39,7 +46,8 @@ RUN mkdir -p /app/agent/memory \
     /app/logs/agent-output \
     /app/state \
     /app/packages \
-    && chown -R agent:agent /app
+    /home/agent/.ssh \
+    && chown -R agent:agent /app /home/agent/.ssh
 
 # Copy scripts
 COPY scripts/ /app/scripts/
@@ -82,7 +90,7 @@ ENV TZ=UTC
 ENV CONTROL_PLANE_PORT=3001
 ENV APP_DIR=/app
 
-# Expose control plane ports
-EXPOSE 3000 3001
+# Expose control plane + SSH ports
+EXPOSE 3000 3001 22
 
 ENTRYPOINT ["/entrypoint.sh"]

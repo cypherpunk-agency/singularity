@@ -1,142 +1,180 @@
-# Production Setup (GCP)
+# Production Setup
 
-## First Deployment
+Guide for deploying Singularity to a production server.
 
-### 1. Prepare Agent Directory
+## Prerequisites
 
-The `agent/` directory is gitignored and must be copied manually. On your local machine:
+- Docker and Docker Compose installed on your server
+- Domain name pointing to your server (for HTTPS)
+- Reverse proxy (Caddy, nginx, Traefik) for SSL termination
+
+## 1. Clone the Repository
 
 ```bash
-# From repo root, create a tarball of agent files
-tar -czvf agent-files.tar.gz agent/context agent/operations agent/memory
+git clone https://github.com/cypherpunk-agency/singularity.git
+cd singularity
 ```
 
-Required structure:
+## 2. Prepare Agent Directory
+
+The `agent/` directory contains the agent's identity and memory. It's gitignored because it contains personal data.
+
+**Option A: Copy from local development**
+```bash
+tar -czvf agent-files.tar.gz agent/context agent/operations agent/memory
+# Transfer to server and extract
+```
+
+**Option B: Create from scratch**
+```bash
+mkdir -p agent/{context,operations,memory,conversation}
+```
+
+Then create the required files:
+
 ```
 agent/
 ├── context/           # Core identity (REQUIRED)
-│   ├── SOUL.md
-│   ├── SYSTEM.md
-│   ├── HEARTBEAT.md
-│   ├── CONVERSATION.md
-│   ├── TELEGRAM.md    # Optional
-│   └── WEB.md         # Optional
+│   ├── SOUL.md        # Agent personality and values
+│   ├── SYSTEM.md      # System overview and APIs
+│   ├── HEARTBEAT.md   # Cron mode instructions
+│   ├── CONVERSATION.md # Chat mode instructions
+│   ├── TELEGRAM.md    # Telegram-specific (optional)
+│   └── WEB.md         # Web-specific (optional)
 ├── operations/        # Task coordination (REQUIRED)
-│   ├── MEMORY.md
-│   ├── OPERATIONS.md
-│   ├── PROJECTS.md
-│   ├── TASKS_SINGULARITY.md
-│   ├── TASKS_TOMMI.md
-│   ├── initiatives/
-│   ├── scheduled/
-│   └── sop/
-├── memory/            # Knowledge files
+│   ├── MEMORY.md      # Persistent facts
+│   ├── OPERATIONS.md  # How agent and human coordinate
+│   ├── PROJECTS.md    # Project directory
+│   ├── TASKS_SINGULARITY.md  # Agent task queue
+│   └── TASKS_TOMMI.md # Human task queue
+├── memory/            # Detailed knowledge files
 └── conversation/      # Chat history (created automatically)
 ```
 
-### 2. Upload to Server
+See `agent/context/` in the repo for example templates.
+
+## 3. Configure Environment
+
+Create `.env` file:
 
 ```bash
-# Copy tarball to server
-gcloud compute scp agent-files.tar.gz web-server:/tmp/ \
-  --zone=us-central1-a --tunnel-through-iap
-
-# SSH in and extract
-gcloud compute ssh web-server --zone=us-central1-a --tunnel-through-iap
-
-# On server:
-cd /mnt/pd/data/singularity
-sudo tar -xzvf /tmp/agent-files.tar.gz
-sudo chown -R 1000:1000 agent/  # agent user UID
-rm /tmp/agent-files.tar.gz
-```
-
-### 3. Configure Secrets
-
-Create/update `.env` on the server (secrets stay server-side, never in git):
-
-```bash
-sudo nano /mnt/pd/data/singularity/.env
+cp .env.example .env
+nano .env
 ```
 
 Required variables:
-```
-VECTOR_SERVICE_URL=http://singularity-vector:5000
-TELEGRAM_BOT_TOKEN=your-real-token
-TELEGRAM_CHAT_ID=your-chat-id
-OPENAI_API_KEY=sk-your-key
-CONTROL_PLANE_TOKEN=optional-api-auth-token
-```
 
-Note: `VECTOR_SERVICE_URL` hostname depends on infra setup (container name or network alias).
+| Variable | Description |
+|----------|-------------|
+| `VECTOR_SERVICE_URL` | Vector service URL (e.g., `http://vector:5000` or `http://singularity-vector:5000`) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+| `OPENAI_API_KEY` | OpenAI API key for Whisper transcription |
+| `CONTROL_PLANE_TOKEN` | Optional API authentication token |
 
-### 4. Deploy
+**Notes:**
+- Keep secrets in `.env` only, never in Docker images or git
+- If Telegram token is missing or invalid, the bot is skipped gracefully
+- `VECTOR_SERVICE_URL` hostname depends on your Docker network setup
 
-```bash
-sudo /usr/local/bin/deploy-service singularity
-```
+## 4. Set File Permissions
 
-### 5. Login to Claude (first time only)
-
-```bash
-sudo docker exec -it -u agent singularity claude login
-```
-
-## Subsequent Deployments
-
-Handled automatically by GitHub Actions on push to main.
-
-## CI/CD Setup
-
-1. Add `GCP_SA_KEY` secret to GitHub repo (JSON service account key)
-2. Workflow builds both images and pushes to ghcr.io
-3. Deploy SSHs to GCP via IAP and runs `deploy-service singularity`
-
-## Server Commands
+The agent container runs as UID 1000:
 
 ```bash
-# Via gcloud SSH
-gcloud compute ssh web-server --zone=us-central1-a --tunnel-through-iap \
-  --command="sudo /usr/local/bin/service-status singularity"
-
-# Once on server
-sudo /usr/local/bin/deploy-service singularity      # Deploy both containers
-sudo /usr/local/bin/service-status singularity      # Check agent status
-sudo /usr/local/bin/service-logs singularity 100    # View last 100 log lines
-sudo /usr/local/bin/service-shell singularity       # Shell into container
+sudo chown -R 1000:1000 agent/
 ```
 
-## Directory Structure on Host
+## 5. Deploy
 
-```
-/mnt/pd/data/singularity/
-├── agent/              # Volume-mounted into container at /app/agent
-│   ├── context/        # SOUL.md, SYSTEM.md, etc.
-│   ├── operations/     # MEMORY.md, TASKS_*.md, etc.
-│   ├── memory/         # Detailed knowledge files
-│   └── conversation/   # Chat history
-├── vector/             # Vector service state
-└── .env                # Environment variables (server-side only)
+**Using docker-compose.prod.yml (pulls pre-built images):**
+```bash
+docker-compose -f docker/docker-compose.prod.yml --env-file .env up -d
 ```
 
-## Container UIDs
+**Or build locally:**
+```bash
+docker-compose -f docker/docker-compose.yml --env-file .env up -d --build
+```
 
-| Container | User | UID:GID | Writes to |
-|-----------|------|---------|-----------|
-| singularity | agent | 1000:1000 | /app/agent |
-| singularity-vector | root | 0:0 | /app/state |
+## 6. Configure Reverse Proxy
+
+Example Caddy configuration:
+
+```
+singularity.yourdomain.com {
+    reverse_proxy localhost:3001
+}
+```
+
+## 7. Login to Claude (First Time)
+
+```bash
+docker exec -it -u agent singularity-agent claude login
+```
+
+Follow the prompts to authenticate.
+
+## CI/CD Setup (Optional)
+
+To auto-deploy on push to main:
+
+1. Add `GCP_SA_KEY` (or equivalent) as a GitHub secret
+2. Configure `.github/workflows/deploy.yml` for your infrastructure
+3. The workflow builds images, pushes to registry, and SSHs to deploy
+
+## Server Management
+
+```bash
+# Check status
+docker-compose -f docker/docker-compose.prod.yml ps
+
+# View logs
+docker logs singularity-agent --tail 100
+docker logs singularity-vector --tail 100
+
+# Restart
+docker-compose -f docker/docker-compose.prod.yml restart
+
+# Shell access
+docker exec -it -u agent singularity-agent bash
+```
+
+## Directory Structure
+
+```
+/your/deploy/path/
+├── agent/              # Volume-mounted at /app/agent
+│   ├── context/
+│   ├── operations/
+│   ├── memory/
+│   └── conversation/
+├── logs/               # Agent logs
+├── state/              # Persistent state (vector DB, sessions)
+└── .env                # Environment variables
+```
+
+## Container Details
+
+| Container | User | UID:GID | Ports | Writes to |
+|-----------|------|---------|-------|-----------|
+| singularity-agent | agent | 1000:1000 | 3001 | /app/agent, /app/logs |
+| singularity-vector | root | 0:0 | 5000 | /app/state |
 
 ## Troubleshooting
 
 | Symptom | Check | Likely Cause |
 |---------|-------|--------------|
-| 502 Bad Gateway | `service-status` | Container crashed or not running |
-| Container restarting | `service-logs` | Missing env vars or agent files |
-| Telegram errors | Check TELEGRAM_BOT_TOKEN | Invalid or placeholder token |
-| "file not found" errors | Check agent/ structure | Missing context/ or operations/ |
-| Vector "unavailable" | Check VECTOR_SERVICE_URL | Wrong hostname or container not running |
+| 502 Bad Gateway | Container status | Container crashed or wrong port |
+| Container restarting | Container logs | Missing env vars or agent files |
+| Telegram not working | TELEGRAM_BOT_TOKEN | Invalid token (check with @BotFather) |
+| Vector "unavailable" | VECTOR_SERVICE_URL | Wrong hostname or vector container down |
+| Permission denied | File ownership | Run `chown -R 1000:1000 agent/` |
+| Claude not responding | Claude login | Run `docker exec -it -u agent singularity-agent claude login` |
 
-## Notes
+## Health Check
 
-- **Telegram graceful degradation**: If `TELEGRAM_BOT_TOKEN` is missing or set to "PLACEHOLDER", the bot is skipped (app continues without Telegram)
-- **Infra-managed deployment**: The infra team uses their own docker-compose.yml on the server, not ours. Environment variables come from their secrets management.
+```bash
+curl http://localhost:3001/health
+# Returns: {"status":"ok","services":{"vector":{"status":"ok"}}}
+```

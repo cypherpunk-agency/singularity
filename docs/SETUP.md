@@ -21,7 +21,7 @@ The `agent/` directory contains the agent's identity and memory. It's gitignored
 
 **Option A: Copy from local development**
 ```bash
-tar -czvf agent-files.tar.gz agent/context agent/operations agent/memory
+tar -czvf agent-files.tar.gz agent/context agent/operations agent/memory agent/conversation agent/daily-briefings agent/daily-logs
 # Transfer to server and extract
 ```
 
@@ -106,6 +106,36 @@ singularity.yourdomain.com {
     reverse_proxy localhost:3001
 }
 ```
+
+### Security: Basic Auth
+
+The web portal should be protected with authentication. Basic auth is simple and effective over HTTPS.
+
+**Generate password hash:**
+```bash
+caddy hash-password --plaintext 'YOUR_STRONG_PASSWORD'
+```
+
+**Add to Caddyfile:**
+```
+singularity.yourdomain.com {
+    basicauth {
+        username $2a$14$... # bcrypt hash from above
+    }
+    reverse_proxy localhost:3001
+}
+```
+
+**Reload Caddy:**
+```bash
+sudo systemctl reload caddy
+```
+
+**Notes:**
+- Use a strong password (24+ chars, random)
+- Password is encrypted in transit via HTTPS
+- Browser remembers credentials after first login
+- Telegram is unaffected (operates server-side)
 
 ## 7. Login to Claude (First Time)
 

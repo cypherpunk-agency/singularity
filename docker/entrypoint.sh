@@ -58,7 +58,7 @@ fi
 # No need to pre-download embedding model here
 
 # Set up environment for cron jobs
-printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH|HOME)' > /etc/environment
+printenv | grep -E '^(AGENT_|TZ|EMBEDDING_|PATH)' > /etc/environment
 
 # Start SSH daemon
 if [ -f /home/agent/.ssh/authorized_keys ]; then

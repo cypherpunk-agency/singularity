@@ -61,11 +61,14 @@ sudo nano /mnt/pd/data/singularity/.env
 
 Required variables:
 ```
+VECTOR_SERVICE_URL=http://singularity-vector:5000
 TELEGRAM_BOT_TOKEN=your-real-token
 TELEGRAM_CHAT_ID=your-chat-id
 OPENAI_API_KEY=sk-your-key
 CONTROL_PLANE_TOKEN=optional-api-auth-token
 ```
+
+Note: `VECTOR_SERVICE_URL` hostname depends on infra setup (container name or network alias).
 
 ### 4. Deploy
 
@@ -131,3 +134,9 @@ sudo /usr/local/bin/service-shell singularity       # Shell into container
 | Container restarting | `service-logs` | Missing env vars or agent files |
 | Telegram errors | Check TELEGRAM_BOT_TOKEN | Invalid or placeholder token |
 | "file not found" errors | Check agent/ structure | Missing context/ or operations/ |
+| Vector "unavailable" | Check VECTOR_SERVICE_URL | Wrong hostname or container not running |
+
+## Notes
+
+- **Telegram graceful degradation**: If `TELEGRAM_BOT_TOKEN` is missing or set to "PLACEHOLDER", the bot is skipped (app continues without Telegram)
+- **Infra-managed deployment**: The infra team uses their own docker-compose.yml on the server, not ours. Environment variables come from their secrets management.

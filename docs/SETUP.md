@@ -2,19 +2,82 @@
 
 ## First Deployment
 
-On GCP host, before first `docker-compose up`:
+### 1. Prepare Agent Directory
 
-1. Clone repo to `/opt/singularity`
-2. Copy `agent/` directory from local (or create from template)
-   - Note: `agent/context/` is gitignored, must be created manually
-3. Create `.env` file with required variables (secrets stay server-side only)
-4. Set volume permissions:
-   ```bash
-   chown -R 1000:1000 /mnt/pd/data/singularity/agent  # agent user UID
-   chown -R 0:0 /mnt/pd/data/singularity/vector       # vector runs as root
-   ```
-5. Run `docker-compose -f docker/docker-compose.prod.yml up -d`
-6. Login to Claude: `docker exec -it -u agent singularity-agent claude login`
+The `agent/` directory is gitignored and must be copied manually. On your local machine:
+
+```bash
+# From repo root, create a tarball of agent files
+tar -czvf agent-files.tar.gz agent/context agent/operations agent/memory
+```
+
+Required structure:
+```
+agent/
+├── context/           # Core identity (REQUIRED)
+│   ├── SOUL.md
+│   ├── SYSTEM.md
+│   ├── HEARTBEAT.md
+│   ├── CONVERSATION.md
+│   ├── TELEGRAM.md    # Optional
+│   └── WEB.md         # Optional
+├── operations/        # Task coordination (REQUIRED)
+│   ├── MEMORY.md
+│   ├── OPERATIONS.md
+│   ├── PROJECTS.md
+│   ├── TASKS_SINGULARITY.md
+│   ├── TASKS_TOMMI.md
+│   ├── initiatives/
+│   ├── scheduled/
+│   └── sop/
+├── memory/            # Knowledge files
+└── conversation/      # Chat history (created automatically)
+```
+
+### 2. Upload to Server
+
+```bash
+# Copy tarball to server
+gcloud compute scp agent-files.tar.gz web-server:/tmp/ \
+  --zone=us-central1-a --tunnel-through-iap
+
+# SSH in and extract
+gcloud compute ssh web-server --zone=us-central1-a --tunnel-through-iap
+
+# On server:
+cd /mnt/pd/data/singularity
+sudo tar -xzvf /tmp/agent-files.tar.gz
+sudo chown -R 1000:1000 agent/  # agent user UID
+rm /tmp/agent-files.tar.gz
+```
+
+### 3. Configure Secrets
+
+Create/update `.env` on the server (secrets stay server-side, never in git):
+
+```bash
+sudo nano /mnt/pd/data/singularity/.env
+```
+
+Required variables:
+```
+TELEGRAM_BOT_TOKEN=your-real-token
+TELEGRAM_CHAT_ID=your-chat-id
+OPENAI_API_KEY=sk-your-key
+CONTROL_PLANE_TOKEN=optional-api-auth-token
+```
+
+### 4. Deploy
+
+```bash
+sudo /usr/local/bin/deploy-service singularity
+```
+
+### 5. Login to Claude (first time only)
+
+```bash
+sudo docker exec -it -u agent singularity claude login
+```
 
 ## Subsequent Deployments
 
@@ -26,12 +89,16 @@ Handled automatically by GitHub Actions on push to main.
 2. Workflow builds both images and pushes to ghcr.io
 3. Deploy SSHs to GCP via IAP and runs `deploy-service singularity`
 
-## Server Commands (via SSH)
+## Server Commands
 
 ```bash
+# Via gcloud SSH
+gcloud compute ssh web-server --zone=us-central1-a --tunnel-through-iap \
+  --command="sudo /usr/local/bin/service-status singularity"
+
+# Once on server
 sudo /usr/local/bin/deploy-service singularity      # Deploy both containers
 sudo /usr/local/bin/service-status singularity      # Check agent status
-sudo /usr/local/bin/service-status singularity-vector
 sudo /usr/local/bin/service-logs singularity 100    # View last 100 log lines
 sudo /usr/local/bin/service-shell singularity       # Shell into container
 ```
@@ -39,22 +106,28 @@ sudo /usr/local/bin/service-shell singularity       # Shell into container
 ## Directory Structure on Host
 
 ```
-/opt/singularity/
-├── agent/              # Volume-mounted into container
+/mnt/pd/data/singularity/
+├── agent/              # Volume-mounted into container at /app/agent
 │   ├── context/        # SOUL.md, SYSTEM.md, etc.
 │   ├── operations/     # MEMORY.md, TASKS_*.md, etc.
 │   ├── memory/         # Detailed knowledge files
 │   └── conversation/   # Chat history
-├── logs/               # Agent logs (volume-mounted)
-├── state/              # Persistent state (volume-mounted)
-└── .env                # Environment variables
+├── vector/             # Vector service state
+└── .env                # Environment variables (server-side only)
 ```
 
-## Required Environment Variables
+## Container UIDs
 
-See `.env.example` for the full list. Critical ones:
+| Container | User | UID:GID | Writes to |
+|-----------|------|---------|-----------|
+| singularity | agent | 1000:1000 | /app/agent |
+| singularity-vector | root | 0:0 | /app/state |
 
-- `TELEGRAM_BOT_TOKEN` - For Telegram integration
-- `TELEGRAM_CHAT_ID` - Your Telegram chat ID
-- `OPENAI_API_KEY` - For Whisper transcription
-- `CONTROL_PLANE_TOKEN` - Optional API auth token
+## Troubleshooting
+
+| Symptom | Check | Likely Cause |
+|---------|-------|--------------|
+| 502 Bad Gateway | `service-status` | Container crashed or not running |
+| Container restarting | `service-logs` | Missing env vars or agent files |
+| Telegram errors | Check TELEGRAM_BOT_TOKEN | Invalid or placeholder token |
+| "file not found" errors | Check agent/ structure | Missing context/ or operations/ |

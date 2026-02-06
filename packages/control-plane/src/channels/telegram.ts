@@ -31,6 +31,12 @@ export async function startTelegramBot(wsManager: WSManager): Promise<void> {
     return;
   }
 
+  // Skip if token looks like a placeholder
+  if (token === 'PLACEHOLDER' || token.length < 20) {
+    console.log('TELEGRAM_BOT_TOKEN appears to be a placeholder, skipping Telegram bot');
+    return;
+  }
+
   authorizedChatId = chatId || null;
   bot = new Bot(token);
 
@@ -232,12 +238,22 @@ Or just send any text to chat with the agent.`);
     console.error('Telegram bot error:', err);
   });
 
-  // Register commands menu
-  await registerBotCommands();
+  // Register commands menu (non-critical, don't crash on failure)
+  try {
+    await registerBotCommands();
+  } catch (error) {
+    console.error('Failed to register bot commands:', error);
+  }
 
   // Start the bot
-  bot.start();
-  console.log('Telegram bot started');
+  try {
+    bot.start();
+    console.log('Telegram bot started');
+  } catch (error) {
+    console.error('Failed to start Telegram bot:', error);
+    console.log('Continuing without Telegram integration');
+    bot = null;
+  }
 }
 
 function isAuthorized(ctx: Context): boolean {

@@ -81,8 +81,6 @@ ENV AGENT_MODEL=sonnet
 ENV TZ=UTC
 ENV CONTROL_PLANE_PORT=3001
 ENV APP_DIR=/app
-# Vector service URL (for control plane to call)
-ENV VECTOR_SERVICE_URL=http://vector:5000
 
 # Expose control plane ports
 EXPOSE 3000 3001

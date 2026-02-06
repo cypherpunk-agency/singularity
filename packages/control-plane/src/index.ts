@@ -120,10 +120,11 @@ async function main() {
     });
     fastify.log.info(`Serving UI from ${uiDistPath}`);
 
-    // SPA fallback for client-side routing
-    const indexHtml = fs.readFileSync(path.join(uiDistPath, 'index.html'), 'utf-8');
+    // SPA fallback for client-side routing (read fresh each time so UI rebuilds take effect without restart)
+    const indexHtmlPath = path.join(uiDistPath, 'index.html');
     fastify.setNotFoundHandler(async (request, reply) => {
       if (!request.url.startsWith('/api') && !request.url.startsWith('/ws') && !request.url.startsWith('/health')) {
+        const indexHtml = fs.readFileSync(indexHtmlPath, 'utf-8');
         return reply.type('text/html').send(indexHtml);
       }
       return reply.code(404).send({ error: 'Not found' });

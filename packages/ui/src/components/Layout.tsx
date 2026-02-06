@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Status } from './Status';
+import { getExtensions } from '../extensions/loader';
 import clsx from 'clsx';
 
 const navItems = [
@@ -12,6 +13,12 @@ const navItems = [
   { path: '/history', label: 'History', icon: '📜' },
   { path: '/usage', label: 'Usage', icon: '$' },
 ] as const;
+
+const extensionNavItems = getExtensions().map((ext) => ({
+  path: `/ext/${ext.path}`,
+  label: ext.name,
+  icon: ext.icon,
+}));
 
 export function Layout() {
   const location = useLocation();
@@ -27,8 +34,12 @@ export function Layout() {
       '/history': 'History - Singularity',
       '/usage': 'Usage - Singularity',
     };
+    // Add extension titles
+    for (const ext of extensionNavItems) {
+      titles[ext.path] = `${ext.label} - Singularity`;
+    }
     // Find matching title (handle nested routes like /files/config/SOUL.md)
-    const basePath = '/' + location.pathname.split('/')[1];
+    const basePath = '/' + location.pathname.split('/').slice(1, location.pathname.startsWith('/ext/') ? 3 : 2).join('/');
     document.title = titles[basePath] || 'Singularity';
   }, [location.pathname]);
 
@@ -67,6 +78,29 @@ export function Layout() {
               <span className="text-[10px]">{item.label}</span>
             </NavLink>
           ))}
+          {extensionNavItems.length > 0 && (
+            <>
+              <div className="w-10 h-px bg-slate-700 my-2" />
+              {extensionNavItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    clsx(
+                      'w-12 h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors',
+                      isActive
+                        ? 'bg-primary-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                    )
+                  }
+                  title={item.label}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                  <span className="text-[10px]">{item.label}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
 
         {/* Content */}

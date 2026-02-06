@@ -44,7 +44,7 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Shared Cross-Session Context                 │
-│  agent/context/SOUL.md, MEMORY.md, SINGULARITY_QUEUE.md          │
+│  agent/context/SOUL.md, MEMORY.md, TASKS_SINGULARITY.md          │
 └─────────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -62,9 +62,9 @@ The agent uses **per-channel sessions** with **cross-session memory**:
 
 | Context Type | System Prompt | History | Shared Memory |
 |--------------|---------------|---------|---------------|
-| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, SINGULARITY_QUEUE.md |
-| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, SINGULARITY_QUEUE.md |
-| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, SINGULARITY_QUEUE.md |
+| Web chat | SOUL.md + CONVERSATION.md | conversation/web/ | MEMORY.md, TASKS_SINGULARITY.md |
+| Telegram | SOUL.md + CONVERSATION.md | conversation/telegram/ | MEMORY.md, TASKS_SINGULARITY.md |
+| Cron | SOUL.md + HEARTBEAT.md | None | MEMORY.md, TASKS_SINGULARITY.md |
 
 ## API Reference
 
@@ -199,6 +199,28 @@ docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type cron
 # Manual chat run (web channel)
 docker exec -u agent singularity-agent /app/scripts/run-agent.sh --type chat --channel web
 ```
+
+## Extensions
+
+Extensions live in `packages/ui/src/extensions/[name]/` (UI) and `packages/control-plane/src/extensions/` (backend).
+
+**Auto-discovery:** Vite's `import.meta.glob` scans `./*/manifest.json` and `./*/index.tsx` at build time. Each extension is code-split into a lazy-loaded chunk.
+
+**Framework files (committed):**
+- `extensions/types.ts` — `ExtensionManifest` and `ExtensionInfo` types
+- `extensions/loader.ts` — `getExtensions()` via glob imports
+- `extensions/ExtensionPage.tsx` — Error boundary + Suspense wrapper
+- `extensions/_hello-world/` — Example extension
+
+**Extension instances** (per-deployment, gitignored): any other subdirectory under `extensions/`.
+
+**Backend:** `control-plane/src/extensions/_loader.ts` scans for `.js` files at startup, each exporting `registerRoutes(fastify, prefix)`. Routes mount at `/api/ext/[name]/*`.
+
+**Core files modified once for the framework:**
+- `router.tsx` — generates extension routes via `getExtensions()`, spreads into Layout children
+- `Layout.tsx` — renders extension nav items after core items with a divider
+
+See [EXTENSIONS.md](EXTENSIONS.md) for the full developer guide.
 
 ## Adding Features
 

@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom';
 import { AppProvider } from './components/AppProvider';
 import { Layout } from './components/Layout';
@@ -8,6 +9,16 @@ import { Files } from './components/Files';
 import { Outputs } from './components/Outputs';
 import { History } from './components/History';
 import { UsageDashboard } from './components/UsageDashboard';
+import { getExtensions } from './extensions/loader';
+import { ExtensionPage } from './extensions/ExtensionPage';
+
+const extensionRoutes: RouteObject[] = getExtensions().map((ext) => {
+  const LazyComponent = lazy(ext.load);
+  return {
+    path: `ext/${ext.path}`,
+    element: <ExtensionPage Component={LazyComponent} name={ext.name} />,
+  };
+});
 
 const routes: RouteObject[] = [
   {
@@ -27,6 +38,7 @@ const routes: RouteObject[] = [
           { path: 'outputs/:sessionId', element: <Outputs /> },
           { path: 'history', element: <History /> },
           { path: 'usage', element: <UsageDashboard /> },
+          ...extensionRoutes,
         ],
       },
     ],

@@ -1,0 +1,7 @@
+{
+  "name": "Hello World",
+  "icon": "👋",
+  "path": "hello-world",
+  "description": "Example extension — delete this or use as a template",
+  "order": 999
+}

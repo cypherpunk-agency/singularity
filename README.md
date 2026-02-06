@@ -362,6 +362,26 @@ packages/
 └── ui/              # React web dashboard
 ```
 
+## Extensions
+
+Extensions add UI pages and optional backend API routes without modifying core files. They're auto-discovered at build time.
+
+Create two files in `packages/ui/src/extensions/my-extension/`:
+
+- `manifest.json` — name, icon, path, order
+- `index.tsx` — default-exported React component
+
+Then rebuild: `docker exec -u agent singularity-agent pnpm --filter @singularity/ui build`
+
+**Separate repo:** Build a custom image that copies extensions in and rebuilds the UI:
+```dockerfile
+FROM singularity:latest
+COPY extensions/ /app/packages/ui/src/extensions/
+RUN cd /app && pnpm --filter @singularity/ui build
+```
+
+See [docs/EXTENSIONS.md](docs/EXTENSIONS.md) for the full guide.
+
 ## License
 
 MIT

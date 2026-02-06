@@ -11,7 +11,7 @@ logs/*
 logs/agent-output/*
 !logs/agent-output/.gitkeep
 
-# Agent workspace (runtime state, config lives here but is not tracked)
+# Agent workspace (runtime state)
 agent/
 
 # Backups
@@ -42,3 +42,9 @@ dist/
 .DS_Store
 Thumbs.db
 nul
+
+# Extension instances (per-deployment, not committed)
+packages/ui/src/extensions/*/
+!packages/ui/src/extensions/_hello-world/
+packages/control-plane/src/extensions/*
+!packages/control-plane/src/extensions/_loader.ts

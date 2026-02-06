@@ -14,6 +14,7 @@ import { registerInterviewProxyRoutes } from './api/interview-proxy.js';
 import { registerJobsProxyRoutes } from './api/jobs-proxy.js';
 import { registerTelegramFilesRoutes } from './api/telegram-files.js';
 import { registerUsageRoutes } from './api/usage.js';
+import { registerExtensionRoutes } from './extensions/_loader.js';
 import { getVectorServiceStatus } from './services/vector-client.js';
 import { setupWebSocket } from './ws/events.js';
 import { startFileWatcher } from './watcher/files.js';
@@ -95,6 +96,7 @@ async function main() {
   await registerJobsProxyRoutes(fastify);
   await registerTelegramFilesRoutes(fastify);
   await registerUsageRoutes(fastify);
+  await registerExtensionRoutes(fastify);
 
   // Start file watcher
   startFileWatcher(wsManager);

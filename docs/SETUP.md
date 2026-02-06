@@ -62,22 +62,42 @@ cp .env.example .env
 nano .env
 ```
 
-Required variables:
-
-| Variable | Description |
-|----------|-------------|
-| `VECTOR_SERVICE_URL` | Vector service URL (e.g., `http://vector:5000` or `http://singularity-vector:5000`) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
-| `OPENAI_API_KEY` | OpenAI API key for Whisper transcription |
-| `CONTROL_PLANE_TOKEN` | Optional API authentication token |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VECTOR_SERVICE_URL` | Yes | Vector service URL (e.g., `http://vector:5000` or `http://singularity-vector:5000`) |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token from @BotFather (see next section) |
+| `TELEGRAM_CHAT_ID` | No | Your Telegram chat ID |
+| `OPENAI_API_KEY` | No | OpenAI API key for Whisper voice transcription |
+| `CONTROL_PLANE_TOKEN` | No | API authentication token for the control plane |
 
 **Notes:**
 - Keep secrets in `.env` only, never in Docker images or git
-- If Telegram token is missing or invalid, the bot is skipped gracefully
+- If Telegram variables are missing, the bot is skipped gracefully — chat still works via the web UI
 - `VECTOR_SERVICE_URL` hostname depends on your Docker network setup
 
-## 4. Set File Permissions
+## 4. Set Up Telegram Bot (Optional)
+
+Skip this section if you don't need Telegram — the web UI works without it.
+
+1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram and send `/newbot`. Follow the prompts to name your bot.
+
+2. **Copy the bot token** — BotFather gives you a token like `123456:ABC-DEF...`. Add it to `.env`:
+   ```
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   ```
+
+3. **Get your chat ID** — start a conversation with your new bot (send `/start`). Then visit:
+   ```
+   https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+   ```
+   Look for `"chat":{"id":123456789}` in the response. Add it to `.env`:
+   ```
+   TELEGRAM_CHAT_ID=123456789
+   ```
+
+**One bot token per deployment** — Telegram uses long-polling, so only one running instance can connect per token. If you run multiple deployments (e.g. cloud + local dev), create a separate bot for each, or leave `TELEGRAM_BOT_TOKEN` empty on instances that don't need Telegram.
+
+## 5. Set File Permissions
 
 The agent container runs as UID 1000:
 
@@ -85,7 +105,7 @@ The agent container runs as UID 1000:
 sudo chown -R 1000:1000 agent/
 ```
 
-## 5. Deploy
+## 6. Deploy
 
 **Using docker-compose.prod.yml (pulls pre-built images):**
 ```bash
@@ -97,7 +117,7 @@ docker-compose -f docker/docker-compose.prod.yml --env-file .env up -d
 docker-compose -f docker/docker-compose.yml --env-file .env up -d --build
 ```
 
-## 6. Configure Reverse Proxy
+## 7. Configure Reverse Proxy
 
 Example Caddy configuration:
 
@@ -137,13 +157,19 @@ sudo systemctl reload caddy
 - Browser remembers credentials after first login
 - Telegram is unaffected (operates server-side)
 
-## 7. Login to Claude (First Time)
+## 8. Set Up Claude Code (First Time)
+
+Singularity uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in headless mode. This requires a **Claude Max subscription** — no API key needed.
 
 ```bash
 docker exec -it -u agent singularity-agent claude login
 ```
 
-Follow the prompts to authenticate.
+The command outputs a URL — open it in your browser to authenticate via OAuth.
+
+**Headless/SSH servers:** Copy the URL to your local browser, complete the OAuth flow, and the CLI picks up the token automatically.
+
+The session is stored in the `singularity-claude-data` Docker volume and persists across container restarts and rebuilds. You only need to re-login if you delete the volume or rebuild the Docker image from scratch.
 
 ## CI/CD Setup (Optional)
 

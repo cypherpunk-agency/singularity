@@ -19,7 +19,7 @@ services:
       - CONTROL_PLANE_TOKEN=${CONTROL_PLANE_TOKEN:-}
       - APP_DIR=/app
       # Vector service (for memory search)
-      - VECTOR_SERVICE_URL=http://vector:5000
+      - VECTOR_SERVICE_URL=${VECTOR_SERVICE_URL:-http://vector:5000}
       # OpenAI API (for Whisper transcription)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-openai}

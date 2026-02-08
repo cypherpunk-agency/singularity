@@ -38,6 +38,9 @@ dist/
 *.swp
 *.swo
 
+# Security
+docs/SECURITY-AUDIT.md
+
 # OS
 .DS_Store
 Thumbs.db

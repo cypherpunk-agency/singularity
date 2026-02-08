@@ -22,4 +22,4 @@ pnpm --filter @singularity/ui test
 - vite.config.ts, package.json - build config
 
 ## Modifiable Files (autonomous)
-- components/Files.tsx, Outputs.tsx, History.tsx, Jobs.tsx, FileViewer.tsx
+- components/Files.tsx, Outputs.tsx, History.tsx, FileViewer.tsx

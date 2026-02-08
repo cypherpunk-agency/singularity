@@ -100,7 +100,7 @@ Each file contains:
 [MEMORY.md content]
 
 ## Current Queue
-[SINGULARITY_QUEUE.md content]
+[TASKS_SINGULARITY.md content]
 
 ## User Prompt
 Process the incoming message and respond via the API.

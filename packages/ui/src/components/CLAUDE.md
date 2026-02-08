@@ -10,7 +10,6 @@
 - Files.tsx - File browser
 - Outputs.tsx - Agent outputs
 - History.tsx - Run history
-- Jobs.tsx - Job tracker
 - FileViewer.tsx - File content viewer
 
 ## New Components

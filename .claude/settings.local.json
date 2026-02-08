@@ -69,7 +69,26 @@
       "Bash(jq:*)",
       "Bash(git -C \"D:\\\\Code\\\\productivity\\\\singularity\" status)",
       "Bash(git -C \"D:\\\\Code\\\\productivity\\\\singularity\" diff packages/control-plane/src/queue/worker.ts)",
-      "Bash(git -C /d/Code/productivity/singularity diff --stat)"
+      "Bash(git -C /d/Code/productivity/singularity diff --stat)",
+      "Bash(findstr:*)",
+      "Bash(docker cp \"D:\\\\Code\\\\productivity\\\\singularity\\\\scripts\\\\memory-search.py\" singularity-vector://app/memory-search.py)",
+      "Bash(docker cp:*)",
+      "Bash(grep:*)",
+      "Bash(ls -la \"D:\\\\Code\\\\productivity\\\\singularity\\\\agent\\\\memory\\\\business\"\" | grep -E \"^-\" | wc -l && ls -la \"D:Codeproductivitysingularityagentmemorypersonal\"\")",
+      "Bash(ls -la \"D:\\\\Code\\\\productivity\\\\singularity\\\\agent\\\\memory\\\\singularity\"\" | grep -E \"^- \")",
+      "Bash(pnpm --filter @singularity/ui add:*)",
+      "mcp__chrome-devtools__evaluate_script",
+      "Bash(ls -la \"D:\\\\Code\\\\productivity\\\\singularity\\\\agent\\\\operations\\\\sop\"\" 2>/dev/null || echo \"sop directory not found \")",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run:*)",
+      "Bash(gcloud compute ssh:*)",
+      "Bash(tar:*)",
+      "Bash(gcloud compute scp:*)",
+      "Bash(git -C \"D:\\\\Code\\\\productivity\\\\singularity\" log --oneline -5)",
+      "Bash(where:*)"
     ]
   }
 }

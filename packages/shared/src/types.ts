@@ -237,39 +237,3 @@ export interface QueueStatusResponse {
   processingRuns: ProcessingRuns;   // Per-channel processing status
   recentCompleted: QueuedRun[];
 }
-
-// Job Tracker types
-export type ApplicationType = 'targeted' | 'mass' | 'network';
-export type ApplicationStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'rejected' | 'ghosted';
-
-export interface JobApplication {
-  id: number;
-  company: string;
-  role: string;
-  location?: string;
-  type: ApplicationType;
-  status: ApplicationStatus;
-  jobUrl?: string;
-  applicationDate: string;
-  lastUpdate: string;
-  notes?: string;
-  source?: string;
-  contactPerson?: string;
-  salary?: string;
-  remote: boolean;
-}
-
-export interface JobAnalytics {
-  totalApplications: number;
-  byStatus: Record<string, number>;
-  byType: Record<string, number>;
-  responseRate: number;
-  interviewRate: number;
-  averageResponseTime?: number;
-  recentActivity: {
-    date: string;
-    applicationsCount: number;
-    targetApplications: number;
-    goal: number;
-  }[];
-}

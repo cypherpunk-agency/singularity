@@ -3,8 +3,6 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-do
 import { AppProvider } from './components/AppProvider';
 import { Layout } from './components/Layout';
 import { Chat } from './components/Chat';
-import { Jobs } from './components/Jobs';
-import { InterviewPrep } from './components/InterviewPrep';
 import { Files } from './components/Files';
 import { Outputs } from './components/Outputs';
 import { History } from './components/History';
@@ -30,8 +28,6 @@ const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/chat" replace /> },
           { path: 'chat', element: <Chat /> },
-          { path: 'jobs', element: <Jobs /> },
-          { path: 'interview', element: <InterviewPrep /> },
           { path: 'files', element: <Files /> },
           { path: 'files/*', element: <Files /> },
           { path: 'outputs', element: <Outputs /> },

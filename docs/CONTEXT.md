@@ -15,7 +15,7 @@ The context preparation system intelligently assembles context for agent runs, u
 │  │ type: chat | cron       │  │  │ 1. SOUL.md (always)         │    │
 │  │ channel: web | telegram │  │  │ 2. SYSTEM.md (always)       │    │
 │  │ query: last user message│──┼─►│ 3. Current timestamp        │    │
-│  └─────────────────────────┘  │  │ 4. OPERATIONS.md (always)   │    │
+│  └─────────────────────────┘  │  │ 4. operations/OPERATIONS.md │    │
 │                               │  │ 5. PROJECTS.md              │    │
 │  Token Budget: ~8000 tokens   │  │ 6. Relevant memory snippets │    │
 │                               │  │ 7. CONVERSATION/HEARTBEAT   │    │

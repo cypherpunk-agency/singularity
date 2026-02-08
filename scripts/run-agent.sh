@@ -115,10 +115,10 @@ $(cat "${CONFIG_DIR}/SYSTEM.md")"
     fi
 
     # 3. OPERATIONS.md (always)
-    if [ -f "${CONFIG_DIR}/OPERATIONS.md" ]; then
+    if [ -f "${AGENT_DIR}/operations/OPERATIONS.md" ]; then
         prompt="${prompt}
 
-$(cat "${CONFIG_DIR}/OPERATIONS.md")"
+$(cat "${AGENT_DIR}/operations/OPERATIONS.md")"
     fi
 
     # 4. PROJECTS.md (always)

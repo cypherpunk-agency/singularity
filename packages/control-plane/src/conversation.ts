@@ -260,8 +260,8 @@ export async function getRecentConversationAll(days: number = 7): Promise<Messag
 }
 
 /**
- * Mark messages as processed by updating their processedAt field
- * Updates messages in today's conversation file that match the given IDs
+ * Mark messages as processed by updating their processedAt field.
+ * Scans all recent date files (not just today's) to handle cross-day messages.
  */
 export async function markMessagesAsProcessed(
   channel: Channel,
@@ -270,29 +270,47 @@ export async function markMessagesAsProcessed(
 ): Promise<void> {
   if (messageIds.length === 0) return;
 
-  const conversationFile = getConversationFile(channel, getTodayDate());
   const idsSet = new Set(messageIds);
+  const remaining = new Set(messageIds);
 
-  try {
-    const content = await fs.readFile(conversationFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(line => line.trim());
+  // Get all date files for this channel, check recent ones
+  const dates = await getConversationDates(channel);
+  const recentDates = dates.slice(0, 7); // Check last 7 days
 
-    const updatedLines = lines.map(line => {
-      try {
-        const message = JSON.parse(line) as Message;
-        if (idsSet.has(message.id)) {
-          message.processedAt = processedAt;
-          return JSON.stringify(message);
+  for (const date of recentDates) {
+    if (remaining.size === 0) break;
+
+    const conversationFile = getConversationFile(channel, date);
+    try {
+      const content = await fs.readFile(conversationFile, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line.trim());
+      let modified = false;
+
+      const updatedLines = lines.map(line => {
+        try {
+          const message = JSON.parse(line) as Message;
+          if (idsSet.has(message.id) && !message.processedAt) {
+            message.processedAt = processedAt;
+            remaining.delete(message.id);
+            modified = true;
+            return JSON.stringify(message);
+          }
+          return line;
+        } catch {
+          return line;
         }
-        return line;
-      } catch {
-        return line;
-      }
-    });
+      });
 
-    await fs.writeFile(conversationFile, updatedLines.join('\n') + '\n');
-  } catch {
-    // File doesn't exist or can't be read, nothing to update
+      if (modified) {
+        await fs.writeFile(conversationFile, updatedLines.join('\n') + '\n');
+      }
+    } catch {
+      // File doesn't exist or can't be read, skip
+    }
+  }
+
+  if (remaining.size > 0) {
+    console.warn(`[conversation] Could not find ${remaining.size} message(s) to mark as processed: ${[...remaining].join(', ')}`);
   }
 }
 

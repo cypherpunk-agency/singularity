@@ -93,7 +93,33 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Keep container running and show logs
-echo "[$(date -Iseconds)] Singularity Agent ready. Tailing logs..."
+# Monitor control plane health and restart if crashed (also keeps container alive)
+echo "[$(date -Iseconds)] Singularity Agent ready. Starting health monitor..."
 echo "[$(date -Iseconds)] Control Plane: http://localhost:${CONTROL_PLANE_PORT:-3001}"
-tail -f /app/logs/heartbeat.log 2>/dev/null || tail -f /dev/null
+
+HEALTH_CHECK_INTERVAL=600  # 10 minutes
+HEALTH_URL="http://localhost:${CONTROL_PLANE_PORT:-3001}/health"
+
+while true; do
+    sleep $HEALTH_CHECK_INTERVAL
+    if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+        echo "[$(date -Iseconds)] Control plane health check failed, restarting..."
+        # Kill any leftover node processes (control plane)
+        pkill -f "node.*control-plane/dist" 2>/dev/null || true
+        pkill -f "node server.js" 2>/dev/null || true
+        sleep 2
+        # Restart control plane as agent user
+        su -s /bin/bash agent -c "HOME=/home/agent node /app/packages/control-plane/dist/index.js" &
+        # Wait for it to come back
+        for i in $(seq 1 30); do
+            if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+                echo "[$(date -Iseconds)] Control plane recovered successfully"
+                break
+            fi
+            sleep 1
+        done
+        if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+            echo "[$(date -Iseconds)] WARNING: Control plane failed to recover"
+        fi
+    fi
+done

@@ -25,7 +25,7 @@ export interface ContextOptions {
   channel?: Channel;
   query?: string;  // User's message for vector search
   tokenBudget?: number;
-  focusMessageIds?: string[];  // Message IDs requiring response (unprocessed messages)
+  focusMessages?: Message[];  // Actual unprocessed messages requiring response
 }
 
 export interface PreparedContext {
@@ -146,7 +146,7 @@ async function getConversationHistoryForContext(
  * Assembles system prompt with intelligent retrieval and token budgeting
  */
 export async function prepareContext(options: ContextOptions): Promise<PreparedContext> {
-  const { type, channel, query, tokenBudget = DEFAULT_BUDGETS.total, focusMessageIds = [] } = options;
+  const { type, channel, query, tokenBudget = DEFAULT_BUDGETS.total, focusMessages = [] } = options;
   const basePath = getBasePath();
 
   let usedTokens = 0;
@@ -304,9 +304,15 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
       // Add channel info
       parts.push(`\n**Channel:** ${channel}`);
 
-      // Highlight unprocessed messages requiring response
-      if (focusMessageIds.length > 0) {
-        parts.push(`**New messages requiring response:** ${focusMessageIds.length}`);
+      // Include actual unprocessed message content so agent always sees them
+      if (focusMessages.length > 0) {
+        const formatted = focusMessages.map(m => {
+          const time = new Date(m.timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit', minute: '2-digit', hour12: false,
+          });
+          return `[${time}] ${m.from === 'human' ? 'Human' : 'Agent'}: ${m.text}`;
+        }).join('\n');
+        parts.push(`## New Messages Requiring Response\n${formatted}`);
       }
     }
   }

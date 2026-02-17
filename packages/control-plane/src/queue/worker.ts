@@ -508,7 +508,7 @@ export class QueueWorker {
       const context = await prepareContext({
         type: 'chat',
         channel,
-        focusMessageIds: messageIds,
+        focusMessages: messages,
       });
 
       // Write system prompt to temp file
@@ -648,14 +648,14 @@ export class QueueWorker {
     await queueManager.markProcessing(queuedRun.id, runId);
 
     // Get unprocessed messages for context (chat mode only)
-    let messageIds: string[] = [];
+    let unprocessedMessages: Message[] = [];
     if (type === 'chat' && channel) {
-      const unprocessedMessages = await getUnprocessedMessages(channel);
-      messageIds = unprocessedMessages.map(m => m.id);
-      if (messageIds.length > 0) {
-        console.log(`[QueueWorker] Found ${messageIds.length} unprocessed messages in ${channel}`);
+      unprocessedMessages = await getUnprocessedMessages(channel);
+      if (unprocessedMessages.length > 0) {
+        console.log(`[QueueWorker] Found ${unprocessedMessages.length} unprocessed messages in ${channel}`);
       }
     }
+    const messageIds = unprocessedMessages.map(m => m.id);
 
     // Spawn the agent script with appropriate arguments
     const runAgentScript = path.join(basePath, 'scripts', 'run-agent.sh');
@@ -679,7 +679,7 @@ export class QueueWorker {
         type,
         channel,
         query: query || prompt,
-        focusMessageIds: messageIds,
+        focusMessages: unprocessedMessages,
       });
 
       // Write system prompt to temp file

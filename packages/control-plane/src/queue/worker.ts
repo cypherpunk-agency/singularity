@@ -313,14 +313,17 @@ export class QueueWorker {
    * Try to process pending messages for a specific channel.
    */
   private async tryProcessChannel(channel: Channel): Promise<void> {
-    // Check if this channel is already processing
+    // Acquire lock atomically — check and set with no await in between
+    // to prevent race conditions from concurrent tryProcessChannel calls
     if (this.processingLocks.get(channel)) {
       return;
     }
+    this.processingLocks.set(channel, true);
 
-    // Check for unprocessed messages
+    // Check for unprocessed messages (now safe behind lock)
     const unprocessed = await getUnprocessedMessages(channel);
     if (unprocessed.length === 0) {
+      this.processingLocks.set(channel, false);
       return;
     }
 
@@ -346,6 +349,7 @@ export class QueueWorker {
         await this.handleMaxRetriesExceeded(channel, messageIds);
         this.channelSeenCount.delete(channel);
         this.channelRetries.delete(channel);
+        this.processingLocks.set(channel, false);
         return;
       }
     } else {
@@ -358,6 +362,7 @@ export class QueueWorker {
       await this.handleMaxRetriesExceeded(channel, messageIds);
       this.channelRetries.delete(channel);
       this.channelSeenCount.delete(channel);
+      this.processingLocks.set(channel, false);
       return;
     }
 
@@ -370,9 +375,6 @@ export class QueueWorker {
       // Different messages — reset retry counter
       this.channelRetries.delete(channel);
     }
-
-    // Acquire lock
-    this.processingLocks.set(channel, true);
 
     try {
       console.log(`[QueueWorker] Processing ${unprocessed.length} unprocessed messages from ${channel}`);

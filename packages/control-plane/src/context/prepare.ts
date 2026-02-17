@@ -290,9 +290,10 @@ export async function prepareContext(options: ContextOptions): Promise<PreparedC
     // 8. Conversation history (with cross-day support)
     if (channel) {
       const remainingBudget = tokenBudget - usedTokens - 500; // Small reserve
+      const conversationBudget = Math.max(DEFAULT_BUDGETS.conversationHistory, remainingBudget);
       const history = await getConversationHistoryForContext(channel, {
         maxMessages: 30,
-        maxTokens: Math.min(DEFAULT_BUDGETS.conversationHistory, remainingBudget),
+        maxTokens: conversationBudget,
         crossDay: true,
       });
 

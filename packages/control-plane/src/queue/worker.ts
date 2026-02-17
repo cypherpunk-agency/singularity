@@ -17,6 +17,10 @@ const CHAT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000]; // escalating backoff
 const STUCK_THRESHOLD_MS = AGENT_TIMEOUT_MS + 5 * 60 * 1000; // timeout + 5 min buffer
 const HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
 
+// Success-loop circuit breaker: prevents infinite loops where runs succeed
+// but the same messages keep appearing (e.g., cross-day marking bug)
+const MAX_SAME_MESSAGE_RUNS = 5;
+
 interface OutputValidation {
   isSuccess: boolean;
   errorMessage?: string;
@@ -131,6 +135,8 @@ export class QueueWorker {
   ]);
   private currentProcesses: Map<LockType, ChildProcess> = new Map();
   private channelRetries: Map<Channel, { count: number; messageIds: string[] }> = new Map();
+  // Tracks how many times the same message IDs have been seen (success or failure)
+  private channelSeenCount: Map<Channel, { count: number; messageIds: string[] }> = new Map();
   private wsManager: WSManager | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
   private healthInterval: NodeJS.Timeout | null = null;
@@ -296,15 +302,37 @@ export class QueueWorker {
     const messageIds = unprocessed.map(m => m.id);
     const retryState = this.channelRetries.get(channel);
 
-    // Check if these are the same messages that already failed
+    // Check if these are the same messages (regardless of success/failure)
     const isSameMessages = retryState &&
       retryState.messageIds.length === messageIds.length &&
       retryState.messageIds.every(id => messageIds.includes(id));
+
+    // Success-loop circuit breaker: if the same messages keep appearing
+    // after successful runs, something is wrong (e.g., cross-day marking bug)
+    const seenState = this.channelSeenCount.get(channel);
+    const isSameSeen = seenState &&
+      seenState.messageIds.length === messageIds.length &&
+      seenState.messageIds.every(id => messageIds.includes(id));
+
+    if (isSameSeen) {
+      seenState!.count++;
+      if (seenState!.count >= MAX_SAME_MESSAGE_RUNS) {
+        console.error(`[QueueWorker] SUCCESS-LOOP DETECTED on ${channel}: same ${messageIds.length} message(s) seen ${seenState!.count} times. Force-marking as processed.`);
+        await this.handleMaxRetriesExceeded(channel, messageIds);
+        this.channelSeenCount.delete(channel);
+        this.channelRetries.delete(channel);
+        return;
+      }
+    } else {
+      // Different messages — reset seen counter
+      this.channelSeenCount.set(channel, { count: 1, messageIds });
+    }
 
     if (isSameMessages && retryState!.count >= MAX_CHAT_RETRIES) {
       console.error(`[QueueWorker] Max retries (${MAX_CHAT_RETRIES}) exceeded for ${channel}, giving up on ${messageIds.length} messages`);
       await this.handleMaxRetriesExceeded(channel, messageIds);
       this.channelRetries.delete(channel);
+      this.channelSeenCount.delete(channel);
       return;
     }
 
@@ -324,7 +352,7 @@ export class QueueWorker {
     try {
       console.log(`[QueueWorker] Processing ${unprocessed.length} unprocessed messages from ${channel}`);
       await this.executeChatRun(channel, unprocessed);
-      // Success — clear retry state
+      // Success — clear failure retry state (but NOT seenCount)
       this.channelRetries.delete(channel);
     } catch (error: any) {
       console.error(`[QueueWorker] Chat run failed for ${channel}: ${error.message}`);

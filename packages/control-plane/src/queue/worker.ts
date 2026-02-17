@@ -1,11 +1,11 @@
 import { spawn, ChildProcess } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { QueuedRun, Channel, Message, LockType } from '@singularity/shared';
+import { QueuedRun, Channel, Message, LockType, isAgentChannel } from '@singularity/shared';
 import { queueManager } from './manager.js';
 import { prepareContext } from '../context/index.js';
-import { getUnprocessedMessages, markMessagesAsProcessed, saveAgentResponse } from '../conversation.js';
-import { extractAndRouteResponse } from '../response/extractor.js';
+import { getUnprocessedMessages, markMessagesAsProcessed, saveAgentResponse, discoverAgentChannels } from '../conversation.js';
+import { extractAndRouteResponse, deliverAgentErrorCallback } from '../response/extractor.js';
 import { WSManager } from '../ws/events.js';
 
 // Configuration for stuck job recovery
@@ -176,7 +176,14 @@ export class QueueWorker {
    */
   private async recoverStuckJobs(): Promise<void> {
     const processingRuns = await queueManager.getProcessingRuns();
-    for (const [lockType, run] of Object.entries(processingRuns)) {
+    // Flatten all runs including agent channels
+    const allRuns: [string, QueuedRun | null][] = [
+      ['web', processingRuns.web],
+      ['telegram', processingRuns.telegram],
+      ['cron', processingRuns.cron],
+      ...Object.entries(processingRuns.agents),
+    ];
+    for (const [lockType, run] of allRuns) {
       if (run) {
         console.log(`[QueueWorker] Recovering stuck job from previous run (${lockType}): ${run.id}`);
         await queueManager.markFailed(run.id, 'Server restart: job was interrupted');
@@ -190,7 +197,15 @@ export class QueueWorker {
   private async checkForStuckJobs(): Promise<void> {
     const processingRuns = await queueManager.getProcessingRuns();
 
-    for (const [lockType, run] of Object.entries(processingRuns) as [LockType, QueuedRun | null][]) {
+    // Flatten all runs including agent channels
+    const allRuns: [LockType, QueuedRun | null][] = [
+      ['web', processingRuns.web],
+      ['telegram', processingRuns.telegram],
+      ['cron', processingRuns.cron],
+      ...Object.entries(processingRuns.agents) as [LockType, QueuedRun | null][],
+    ];
+
+    for (const [lockType, run] of allRuns) {
       if (!run?.startedAt) continue;
 
       const elapsedMs = Date.now() - new Date(run.startedAt).getTime();
@@ -276,6 +291,16 @@ export class QueueWorker {
     // Try chat channels (web, telegram)
     for (const channel of ['telegram', 'web'] as Channel[]) {
       promises.push(this.tryProcessChannel(channel));
+    }
+
+    // Try agent channels (dynamically discovered)
+    try {
+      const agentChannels = await discoverAgentChannels();
+      for (const channel of agentChannels) {
+        promises.push(this.tryProcessChannel(channel));
+      }
+    } catch (error) {
+      // Don't block processing if agent channel discovery fails
     }
 
     // Try cron runs
@@ -397,6 +422,15 @@ export class QueueWorker {
           await sendToTelegram(errorText);
         } catch (telegramError) {
           console.error('[QueueWorker] Failed to send error to Telegram:', telegramError);
+        }
+      }
+
+      // Deliver error callback for agent channels
+      if (isAgentChannel(channel)) {
+        try {
+          await deliverAgentErrorCallback(channel, messageIds);
+        } catch (callbackError) {
+          console.error('[QueueWorker] Failed to deliver agent error callback:', callbackError);
         }
       }
     } catch (error) {

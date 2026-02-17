@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Message, Channel } from '@singularity/shared';
+import { Message, Channel, MessageMetadata } from '@singularity/shared';
 import { estimateTokens, truncateArrayToTokenBudget } from './context/index.js';
 
 // Get base path (use APP_DIR env or default)
@@ -42,13 +42,14 @@ export async function appendToConversation(channel: Channel, message: Message): 
 /**
  * Create and save a human message to the conversation
  */
-export async function saveHumanMessage(text: string, channel: Channel): Promise<Message> {
+export async function saveHumanMessage(text: string, channel: Channel, metadata?: MessageMetadata): Promise<Message> {
   const message: Message = {
     id: uuidv4(),
     text,
     from: 'human',
     channel,
     timestamp: new Date().toISOString(),
+    ...(metadata ? { metadata } : {}),
   };
 
   await appendToConversation(channel, message);
@@ -324,11 +325,32 @@ export async function getUnprocessedMessages(channel: Channel): Promise<Message[
 }
 
 /**
+ * Discover all agent-* channel directories dynamically.
+ */
+export async function discoverAgentChannels(): Promise<Channel[]> {
+  const conversationDir = getConversationDir();
+  try {
+    const entries = await fs.readdir(conversationDir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isDirectory() && e.name.startsWith('agent-'))
+      .map(e => e.name as Channel);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Check if there are any unprocessed human messages
  * Optionally check a specific channel, or all channels if not specified
  */
 export async function hasUnprocessedMessages(channel?: Channel): Promise<boolean> {
-  const channels: Channel[] = channel ? [channel] : ['web', 'telegram'];
+  let channels: Channel[];
+  if (channel) {
+    channels = [channel];
+  } else {
+    const agentChannels = await discoverAgentChannels();
+    channels = ['web', 'telegram', ...agentChannels];
+  }
 
   for (const ch of channels) {
     const unprocessed = await getUnprocessedMessages(ch);

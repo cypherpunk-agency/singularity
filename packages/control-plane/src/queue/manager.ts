@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { QueuedRun, RunType, Channel, ProcessingRuns } from '@singularity/shared';
+import { QueuedRun, RunType, Channel, ProcessingRuns, isAgentChannel } from '@singularity/shared';
 import { readQueue, appendToQueue, updateQueueEntry, cleanupQueue } from './storage.js';
 
 export interface EnqueueOptions {
@@ -168,11 +168,14 @@ export class QueueManager {
       web: null,
       telegram: null,
       cron: null,
+      agents: {},
     };
 
     for (const run of processing) {
       if (run.type === 'cron') {
         result.cron = run;
+      } else if (run.channel && isAgentChannel(run.channel)) {
+        result.agents[run.channel] = run;
       } else if (run.channel === 'web') {
         result.web = run;
       } else if (run.channel === 'telegram') {

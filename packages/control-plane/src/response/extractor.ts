@@ -6,10 +6,12 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Channel, Message } from '@singularity/shared';
+import { Channel, Message, AgentCallbackPayload, isAgentChannel } from '@singularity/shared';
 import { WSManager } from '../ws/events.js';
 import { formatForChannel } from './formatter.js';
 import { sendToTelegram } from '../channels/telegram.js';
+import { deliverCallback, storeCallbackResult } from '../channels/agent-callback.js';
+import { getRecentMessages } from '../conversation.js';
 
 // Get base path (use APP_DIR env or default)
 function getBasePath(): string {
@@ -92,9 +94,81 @@ export async function extractAndRouteResponse(
       await sendToTelegram(formattedText, resultText);
     }
 
+    // Deliver callback for agent channels
+    if (isAgentChannel(channel)) {
+      await deliverAgentCallback(channel, entry.runId, formattedText, output.duration_ms);
+    }
+
     console.log(`[extractor] Routed response for run ${entry.runId} to ${channel} channel`);
   } catch (error) {
     console.error(`[extractor] Failed to extract response for run ${entry.runId}:`, error);
+  }
+}
+
+/**
+ * Deliver callback response for agent channels.
+ * Finds the original human message's callback metadata and delivers the response.
+ */
+async function deliverAgentCallback(
+  channel: Channel,
+  runId: string,
+  text: string,
+  durationMs?: number
+): Promise<void> {
+  // Find the most recent human message with callback metadata
+  const recentMessages = await getRecentMessages(channel, 50);
+  const humanMessage = [...recentMessages]
+    .reverse()
+    .find(m => m.from === 'human' && m.metadata?.callbackUrl);
+
+  if (!humanMessage?.metadata?.callbackUrl) {
+    console.warn(`[extractor] No callback URL found for agent channel ${channel}, run ${runId}`);
+    return;
+  }
+
+  const payload: AgentCallbackPayload = {
+    request_id: humanMessage.id,
+    status: 'completed',
+    text,
+    meta: {
+      channel,
+      duration_ms: durationMs,
+    },
+  };
+
+  // Store for polling fallback
+  storeCallbackResult(humanMessage.id, payload);
+
+  // Deliver via webhook
+  await deliverCallback(humanMessage.metadata.callbackUrl, humanMessage.metadata.callbackSecret, payload);
+}
+
+/**
+ * Deliver an error callback for agent channels when processing fails.
+ */
+export async function deliverAgentErrorCallback(
+  channel: Channel,
+  messageIds: string[]
+): Promise<void> {
+  if (!isAgentChannel(channel)) return;
+
+  const recentMessages = await getRecentMessages(channel, 50);
+
+  for (const msgId of messageIds) {
+    const humanMessage = recentMessages.find(m => m.id === msgId && m.metadata?.callbackUrl);
+    if (!humanMessage?.metadata?.callbackUrl) continue;
+
+    const payload: AgentCallbackPayload = {
+      request_id: humanMessage.id,
+      status: 'failed',
+      error: 'Processing failed after maximum retries',
+      meta: {
+        channel,
+      },
+    };
+
+    storeCallbackResult(humanMessage.id, payload);
+    await deliverCallback(humanMessage.metadata.callbackUrl, humanMessage.metadata.callbackSecret, payload);
   }
 }
 

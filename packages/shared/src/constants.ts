@@ -78,6 +78,7 @@ export const WATCH_CONFIG = {
     'agent/memory/*.md',
     'agent/conversation/web/*.jsonl',
     'agent/conversation/telegram/*.jsonl',
+    'agent/conversation/agent-*/*.jsonl',
     'state/run-history.jsonl',
     'logs/agent-output/*.json',
   ],

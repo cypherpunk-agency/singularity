@@ -36,7 +36,7 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
 
     // Check if agent is currently running via queue (any channel)
     const processingRuns = await queueManager.getProcessingRuns();
-    const isRunning = processingRuns.web || processingRuns.telegram || processingRuns.cron;
+    const isRunning = processingRuns.web || processingRuns.telegram || processingRuns.cron || Object.values(processingRuns.agents).some(Boolean);
     const status: 'idle' | 'running' | 'error' = isRunning ? 'running' : 'idle';
 
     // Calculate next scheduled run (next hour)
@@ -110,7 +110,7 @@ export async function registerAgentRoutes(fastify: FastifyInstance) {
     try {
       // Check if any agent runs are currently processing
       const processingRuns = await queueManager.getProcessingRuns();
-      const activeRuns = [processingRuns.web, processingRuns.telegram, processingRuns.cron].filter(Boolean);
+      const activeRuns = [processingRuns.web, processingRuns.telegram, processingRuns.cron, ...Object.values(processingRuns.agents)].filter(Boolean);
 
       if (activeRuns.length > 0) {
         // Queue the restart to happen after all current runs complete

@@ -1,5 +1,5 @@
 // Channel type for message routing
-export type Channel = 'web' | 'telegram';
+export type Channel = 'web' | 'telegram' | `agent-${string}`;
 
 // Run type for agent context
 export type RunType = 'chat' | 'cron';
@@ -7,11 +7,18 @@ export type RunType = 'chat' | 'cron';
 // Lock type for per-channel queue processing
 export type LockType = Channel | 'cron';
 
+// Helper to check if a channel is an agent channel
+export function isAgentChannel(channel: string): channel is `agent-${string}` {
+  return channel.startsWith('agent-');
+}
+
 // Message metadata for agent responses
 export interface MessageMetadata {
   runId?: string;      // Link to session for detailed view
   duration?: number;   // Run duration in ms
   cost?: number;       // Cost in USD
+  callbackUrl?: string;    // Agent channel: URL to POST response to
+  callbackSecret?: string; // Agent channel: Bearer token for callback auth
 }
 
 // Message types for chat interface
@@ -150,10 +157,24 @@ export interface StatusUpdatePayload {
   status: AgentStatus;
 }
 
+// Callback payload for agent channel responses
+export interface AgentCallbackPayload {
+  request_id: string;
+  status: 'completed' | 'failed';
+  text?: string;
+  error?: string;
+  meta: {
+    channel: string;
+    duration_ms?: number;
+  };
+}
+
 // API request/response types
 export interface SendMessageRequest {
   text: string;
   channel?: Channel;
+  callback_url?: string;    // Agent channel: URL to POST response to
+  callback_secret?: string; // Agent channel: Bearer token for callback auth
 }
 
 export interface RespondMessageRequest {
@@ -229,6 +250,7 @@ export interface ProcessingRuns {
   web: QueuedRun | null;
   telegram: QueuedRun | null;
   cron: QueuedRun | null;
+  agents: Record<string, QueuedRun | null>;
 }
 
 export interface QueueStatusResponse {

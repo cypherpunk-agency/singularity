@@ -327,6 +327,7 @@ This prevents "ghost runs" where multiple messages would create duplicate sessio
 | `TELEGRAM_CHAT_ID` | (empty) | Your Telegram chat ID |
 | `OPENAI_API_KEY` | (empty) | OpenAI API key for Whisper transcription |
 | `TRANSCRIPTION_PROVIDER` | `auto` | Transcription provider: `openai`, `local`, or `auto` |
+| `EXTRA_SCAN_DIRS` | (empty) | Colon-separated extra dirs to index for vector search |
 | `INTERVIEW_API_URL` | `http://localhost:3003` | Interview Prep API URL (proxied) |
 | `JOB_TRACKER_API_URL` | `http://localhost:3002` | Job Tracker API URL (proxied) |
 

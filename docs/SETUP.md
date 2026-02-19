@@ -69,6 +69,7 @@ nano .env
 | `TELEGRAM_CHAT_ID` | No | Your Telegram chat ID |
 | `OPENAI_API_KEY` | No | OpenAI API key for Whisper voice transcription |
 | `CONTROL_PLANE_TOKEN` | No | API authentication token for the control plane |
+| `EXTRA_SCAN_DIRS` | No | Colon-separated container paths to index (add matching volume mounts) |
 
 **Notes:**
 - Keep secrets in `.env` only, never in Docker images or git

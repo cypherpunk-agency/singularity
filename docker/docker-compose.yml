@@ -87,6 +87,7 @@ services:
     environment:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - APP_DIR=/app
+      - EXTRA_SCAN_DIRS=${EXTRA_SCAN_DIRS:-}
 
     volumes:
       # State persistence (vector DB)

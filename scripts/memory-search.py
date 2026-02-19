@@ -25,6 +25,10 @@ AGENT_DIR = APP_DIR / "agent"
 STATE_DIR = APP_DIR / "state"
 MEMORY_DB = STATE_DIR / "memory.db"
 MEMORY_DIR = AGENT_DIR / "memory"
+EXTRA_SCAN_DIRS = [
+    Path(d.strip()) for d in os.environ.get("EXTRA_SCAN_DIRS", "").split(":")
+    if d.strip()
+]
 
 # Chunking configuration
 CHUNK_SIZE = 400  # tokens (approximate)
@@ -141,10 +145,10 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot_product / (norm_a * norm_b)
 
 
-def index_file(conn: sqlite3.Connection, file_path: Path) -> bool:
+def index_file(conn: sqlite3.Connection, file_path: Path, relative_root: Path = AGENT_DIR) -> bool:
     """Index a single file into the database."""
     file_hash = get_file_hash(file_path)
-    rel_path = str(file_path.relative_to(AGENT_DIR))
+    rel_path = str(file_path.relative_to(relative_root))
 
     cursor = conn.execute(
         "SELECT hash FROM files WHERE path = ?",
@@ -210,6 +214,17 @@ def do_index_all() -> dict:
             rel_path = md_file.relative_to(AGENT_DIR)
             if index_file(conn, md_file):
                 files_indexed.append(str(rel_path).replace("\\", "/"))
+                indexed += 1
+
+    # Index extra scan directories
+    for extra_dir in EXTRA_SCAN_DIRS:
+        if not extra_dir.exists():
+            continue
+        # Files under AGENT_DIR keep agent-relative paths; others use parent as root
+        root = AGENT_DIR if str(extra_dir).startswith(str(AGENT_DIR)) else extra_dir.parent
+        for md_file in extra_dir.glob("**/*.md"):
+            if index_file(conn, md_file, relative_root=root):
+                files_indexed.append(str(md_file.relative_to(root)).replace("\\", "/"))
                 indexed += 1
 
     conn.close()

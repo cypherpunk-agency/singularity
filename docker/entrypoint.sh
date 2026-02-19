@@ -93,6 +93,12 @@ for i in {1..30}; do
     sleep 1
 done
 
+# Run agent startup script if it exists (non-blocking)
+if [ -x /app/agent/startup.sh ]; then
+    echo "[$(date -Iseconds)] Running agent startup script..."
+    su -s /bin/bash agent -c '/app/agent/startup.sh' &
+fi
+
 # Monitor control plane health and restart if crashed (also keeps container alive)
 echo "[$(date -Iseconds)] Singularity Agent ready. Starting health monitor..."
 echo "[$(date -Iseconds)] Control Plane: http://localhost:${CONTROL_PLANE_PORT:-3001}"
